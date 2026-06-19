@@ -1,0 +1,9 @@
+# Normaliza finales de línea: el repo guarda LF (ideal para Linux/Hostinger).
+* text=auto eol=lf
+
+# Binarios (no tocar)
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary

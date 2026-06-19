@@ -1,0 +1,32 @@
+FECHAINGRESO	CODIGO	DESCRIPCION	DESCRIPCIONCOMPLETA	DEFINICION	PESOVACIOMINIMO	PESOVACIOMAXIMO	MERCANCIAPELIGROSA	TIPOEMPAQUE	NOMTIPOEMPAQUE	MATERIALEMPAQUE	NOMMATERIALEMPAQUE	TIPOOPERACION	
+2025/03/12 14:52:39	3H	Jerrican, Envase poligonal en Plastico	Jerrican, Envase poligonal en Plastico	Jerrican, Envase poligonal en Plastico	0	0	SI	3	JERRICAN	H	PLASTICO	.	
+2025/03/12 14:50:39	3A	Jerrican, Envase poligonal en Acero	Jerrican, Envase poligonal en Acero	Jerrican, Envase poligonal en Acero	0	0	SI	3	JERRICAN	A	ACERO	.	
+2025/03/12 14:46:18	1A	Bidon, Envase de cuerpo cilindrico en Acero	Bidon, Envase de cuerpo cilindrico en Acero	Bidon, Envase de cuerpo cilindrico en Acero	0	0	SI	1	BIDON	A	ACERO	.	
+2025/03/12 14:43:23	1B	Bidon, Envase de cuerpo cilindrico en Aluminio	Bidon, Envase de cuerpo cilindrico en Aluminio	Bidon, Envase de cuerpo cilindrico en Aluminio	0	0	SI	1	BIDON	B	ALUMINIO	.	
+2025/02/07 19:32:55	6P	Embalaje/Envase Compuesto de Vidrio	Embalaje/Envase Compuesto de Vidrio o Porcelana	Embalaje/Envase Compuesto de Vidrio o Porcelana	0	0	SI	6	Embalaje/Envase Compuesto	P	VIDRIO	.	
+2025/02/07 19:09:21	4B	Caja de Aluminio	Caja de Aluminio	null	0	0	SI	4	CAJA	B	ALUMINIO	.	
+2025/02/07 19:06:17	4A	Caja de Acero	Caja de Acero	null	0	0	SI	4	CAJA	A	ACERO	.	
+2025/02/07 19:31:32	6H	Embalaje/Envase Compuesto de Plastico	Embalaje/Envase Compuesto de Plastico	Embalaje/Envase Compuesto de Plastico	0	0	SI	6	Embalaje/Envase Compuesto	H	PLASTICO	.	
+2024/11/17 23:24:17	5M	Saco o Talega de Papel	Saco o Talega de Papel	Saco o Talega de Papel para sólidos	0	0	 	5	SACO	M	PAPEL	.	
+2024/04/02 09:42:32	13H4	Big-Bag tejido Laminado + Bolsa interior	Big-Bag de tejido de Polipropileno Laminado + Bolsa interior	Se utiliza para sólidos	0	0	 	 	 	 	 	.	
+2024/04/02 09:42:32	13H3	Big-Bag tejido No Laminado + Bolsa interior	Big-Bag de tejido No Laminado + Bolsa interior	Se utiliza para sólidos	0	0	 	 	 	 	 	.	
+2024/04/02 09:42:31	13H2	Big-Bag tejido Laminado Sin Bolsa interior	Big-Bag de tejido de Polipropileno Laminado Sin Bolsa interior	Se utiliza para sólidos	0	0	 	 	 	 	 	.	
+2024/04/02 09:42:31	13H1	Big-Bag tejido No Laminado Sin Bolsa interior	Big-Bag de tejido No Laminado Sin Bolsa interior	Se utiliza para sólidos	0	0	 	 	 	 	 	.	
+2023/02/05 10:15:55	10	1 C 45 pies (Contenedor)	Un contenedor de 45 pies	Es un recipiente de carga resistente para permitir su reiterada reutilización, concebido especialmente para facilitar el transporte de las mercancías mediante uno o varios modos de transporte, posee una dimensión normalizada de 45 pies (6m.).	2200	6500	 	 	 	 	 	C	
+2011/08/26 09:55:26	19	Carga Estibada	Carga Estibada	Aplica cuando se transportan mercancías estibadas en grandes bultos sobre plataformas, con soportes y barandas para acondicionarlas y protegerlas mejor, facilitando la manipulación de la carga.	0	0	 	 	 	 	 	.	
+2011/08/25 10:42:35	18	Unidad sin empaque	Unidad sin empaque	Se utiliza cuando el producto a transportar sean automóviles, animales o maquinaria	0	0	 	 	 	 	 	G	
+2011/08/25 10:49:23	17	Varios	Varios	Aplica cuando en un mismo viaje van varios tipos de productos con diferentes empaques.	0	0	 	 	 	 	 	P	
+2011/08/26 09:54:54	15	Granel Sólido	Granel Sólido	Es toda carga sólida, transportada en forma masiva, homogénea, sin empaque, cuya manipulación usual no deba realizarse por unidades.	0	0	 	 	 	 	 	G	
+2011/08/26 09:54:28	12	Cilindros	Cilindros	Recipiente utilizado para almacenar y transportar gases, con capacidad entre 5 y 46 kilogramos (kg) puede ser metálico o de construcción compuesta.	0	0	 	 	 	 	 	.	
+2011/08/26 09:54:04	4	General Fraccionada (Bulto, Caja, Saco, Paca, Pieza)	General Fraccionada (Bulto, Caja, Saco, Paca, Pieza)	Es toda unidad de embalaje independiente y no agrupada de mercancía acondicionada para el transporte, como bidón, saco, tonel, bolsa, guacales, caja, bulto	0	0	 	 	 	 	 	G	
+2022/06/16 13:04:38	4H	Caja de plastico	Caja de plastico	Caja de plastico	0	0	SI	4	CAJA	H	PLASTICO	.	
+2022/06/16 13:03:14	1H	Bidón o Envase de plastico	Bidón o Envase de plastico	Bidón o Envase de plastico	0	0	 	 	 	 	 	.	
+2022/06/16 12:57:35	4G	Caja de Cartón	Caja de Cartón	Caja de Cartón	0	0	SI	4	CAJA	G	CARTON	.	
+2011/08/26 09:53:14	6	Granel Líquido	Granel Líquido	Es toda carga líquida, transportada en forma masiva, homogénea, sin empaque, cuya manipulación usual no deba realizarse por unidades.	0	0	 	 	 	 	 	G	
+2011/08/26 09:52:47	9	1 C 40 pies (Contenedor)	Un contenedor de 40 pies	Recipiente de carga resistente para permitir su reiterada reutilización, concebido especialmente para facilitar el transporte de las mercancías mediante uno o varios modos de transporte, posee una dimensión normalizada de 40 pies (12m.)	2200	6500	 	 	 	 	 	C	
+2011/08/26 09:52:18	8	2 C 20 pies (Contenedor)	Dos contenedores de 20 pies	Es un recipiente de carga resistente para permitir su reiterada reutilización, concebido especialmente para facilitar el transporte de las mercancías mediante uno o varios modos de transporte, posee una dimensión normalizada de 20 pies (6m.).	3600	8000	 	 	 	 	 	C	
+2011/08/26 09:51:48	7	1 C 20 pies (Contenedor)	Un contenedor de 20 pies	Es un recipiente de carga resistente para permitir su reiterada reutilización, concebido especialmente para facilitar el transporte de las mercancías mediante uno o varios modos de transporte, posee una dimensión normalizada de 20 pies (6m)	1800	4000	 	 	 	 	 	C	
+2022/06/16 12:55:08	5H	Saco o Talega de Polietileno o Polipropileno	Saco o Talega de Polietileno o Polipropileno	Saco o Talega de Polietileno o Polipropileno	0	0	SI	5	SACO	H	PLASTICO	.	
+2022/06/16 12:52:50	5L	Saco o Talega de Yute, Algodón, Fique o Cabuya	Saco o Talega de Yute, Algodón, Fique o Cabuya	Saco o Talega de Yute, Algodón, Fique o Cabuya	0	0	 	 	 	 	 	.	
+2011/08/25 10:21:53	0	Paquete. General Fraccionada en máximo 2 kgs por unidad de empaque	Paquetes. General Fraccionada en máximo 2 kgs por unidad de empaque	Carga separada en bultos o cajas o piezas o sacos y el peso de cada unidad no es mayor a dos (2) kilogramos	0	0	 	 	 	 	 	P	
+2022/06/16 12:50:31	4C	Caja de Madera Natural	Caja de Madera Natural	Caja de Madera Natural	0	0	SI	4	CAJA	C	MADERA NATURAL	.	

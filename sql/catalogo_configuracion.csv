@@ -1,0 +1,44 @@
+FECHAINGRESO	CODIGO	NOMBRE	DESCRIPCION	TIPO	PESOVACIOMINIMO	PESOVACIOMAXIMO	
+2025/05/10 18:48:32	28	SM9	SemiRemolque Modular de 9 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	27	SM8	SemiRemolque Modular de 8 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	26	SM7	SemiRemolque Modular de 7 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	25	SM6	SemiRemolque Modular de 6 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	24	SM5	SemiRemolque Modular de 5 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	23	SM4	SemiRemolque Modular de 4 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	22	SM3	SemiRemolque Modular de 3 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	21	SM2	SemiRemolque Modular de 2 ejes	SemiRemolque Modular	300	25000	
+2025/05/10 18:48:32	20	SM1	SemiRemolque Modular de 1 eje	SemiRemolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM9	Remolque Modular de 9 ejes	Remolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM8	Remolque Modular de 8 ejes	Remolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM7	Remolque Modular de 7 ejes	Remolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM6	Remolque Modular de 6 ejes	Remolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM5	Remolque Modular de 5 ejes	Remolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM4	Remolque Modular de 4 ejes	Remolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM3	Remolque Modular de 3 ejes	Remolque Modular	300	25000	
+2025/05/10 18:42:24	10	RM2	Remolque Modular de 2 ejes	Remolque Modular	300	25000	
+2025/05/10 18:39:33	10	RM1	Remolque Modular de 1 eje	Remolque Modular	300	25000	
+2022/01/28 11:26:51	47	V4	Volqueta de 4 ejes	Rígido	500	25000	
+2019/03/20 14:37:04	49	V3	Volqueta de 3 ejes	Rígido	300	25000	
+2019/03/20 14:37:04	48	V2	Volqueta de 2 ejes	Rígido	300	25000	
+2019/03/20 14:16:37	45	CA	Camioneta de 2 ejes	Rígido	800	3300	
+2018/01/31 10:07:24	40	M2	Motocarro de 2 ejes	Rígido	300	25000	
+2011/07/17 16:08:39	85	B5	Remolque Balanceado de más de 4 ejes	Remolque Balanceado	300	25000	
+2011/07/17 16:07:54	84	B4	Remolque Balanceado de 4 ejes	Remolque Balanceado	300	25000	
+2011/07/17 16:05:23	74	R5	Remolque de más de 4 ejes	Remolque	300	25000	
+2011/06/18 22:01:57	54	3S	Tractocamión de 3 ejes	Cabezote	2500	16000	
+2011/06/18 22:01:26	53	2S	Tractocamión de 2 ejes	Cabezote	2000	15000	
+2011/07/17 07:05:00	56	5	Camión Rígido de más de 4 ejes	Rígido	300	25000	
+2011/07/17 07:04:49	55	4S	Tractocamión de más de 3 ejes	Cabezote	3000	20000	
+2011/07/17 07:05:50	64	S4	Semiremolque de más de 3 ejes	Semiremolque	300	25000	
+2011/07/17 07:06:34	83	B3	Remolque Balanceado de 3 ejes	Remolque Balanceado	300	25000	
+2011/07/17 07:05:39	63	S3	Semiremolque de 3 ejes	Semiremolque	300	25000	
+2011/06/18 21:59:34	52	4	Camión Rígido de 4 ejes	Rígido	2000	18000	
+2011/07/17 07:06:12	73	R4	Remolque de 4 ejes	Remolque	300	25000	
+2011/07/17 07:06:01	72	R3	Remolque de 3 ejes	Remolque	300	25000	
+2011/07/17 07:06:24	82	B2	Remolque Balanceado de 2 ejes	Remolque Balanceado	300	25000	
+2011/05/31 23:56:14	81	B1	Remolque Balanceado de 1 eje	Remolque Balanceado	300	25000	
+2011/05/31 23:56:01	71	R2	Remolque de 2 ejes	Remolque	300	25000	
+2011/07/17 07:05:29	62	S2	Semiremolque de 2 ejes	Semiremolque	300	25000	
+2011/07/17 07:05:16	61	S1	Semiremolque de 1 eje	Semiremolque	300	25000	
+2011/07/17 07:04:35	51	3	Camión Rígido de 3 ejes	Rígido	1500	15000	
+2011/07/17 07:04:23	50	2	Camión Rígido de 2 ejes	Rígido	1000	11000	

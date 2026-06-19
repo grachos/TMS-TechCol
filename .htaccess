@@ -1,0 +1,22 @@
+# ==========================================================
+#  Light TMS - .htaccess RAÍZ
+#  Permite desplegar el repo completo en public_html SIN cambiar
+#  el document root: enruta todo el tráfico a la carpeta public/
+#  y bloquea el acceso a archivos/carpetas sensibles.
+#
+#  Si el dominio/subdominio ya apunta directo a /public, este
+#  archivo queda fuera del document root y simplemente no se usa.
+# ==========================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Evita reescribir lo que ya está dentro de public/
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Bloquea el acceso directo a archivos de configuración sensibles.
+<FilesMatch "(^\.env|composer\.(json|lock)|\.gitignore|\.gitattributes)">
+    Require all denied
+</FilesMatch>

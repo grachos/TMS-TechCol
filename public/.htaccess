@@ -1,0 +1,9 @@
+# Light TMS - public/ (carpeta expuesta a la web)
+
+# Sin listados de directorio
+Options -Indexes
+
+# Bloquea archivos ocultos (.env, .htaccess, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
