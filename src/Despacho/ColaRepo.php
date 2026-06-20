@@ -217,6 +217,7 @@ final class ColaRepo
     {
         $vars = [
             'NUMNITEMPRESATRANSPORTE'         => config()['rndc']['empresa'],
+            'consecutivoRemesa'               => (new EmpresaRepo())->siguienteRadicadoRemesa(),
             'CONSECUTIVOREMESA'               => $r['num_remesa'],
             'CODOPERACIONTRANSPORTE'          => $r['operacion_transporte'],
             'CODNATURALEZACARGA'              => $r['naturaleza_carga'],
@@ -242,7 +243,6 @@ final class ColaRepo
             'HORACITAPACTADACARGUE'           => $r['hora_cita_cargue'],
             'FECHACITAPACTADADESCARGUE'       => self::fecha($r['fecha_cita_descargue']),
             'HORACITAPACTADADESCARGUEREMESA'  => $r['hora_cita_descargue'],
-            'REMDUENOPOLIZA'                  => $r['tomador_poliza'] ?: 'E',
         ];
         return RndcClient::renderVariables($vars);
     }

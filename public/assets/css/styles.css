@@ -236,3 +236,32 @@ code {
 .mapa-barra input { flex: 1; padding: 8px 10px; border: 1px solid var(--gris-borde); border-radius: var(--radio); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .check input { width: auto; }
+
+/* ---- Product info (solicitud form) ---- */
+.producto-info {
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: #f8fafc;
+    border: 1px solid var(--gris-borde);
+    border-radius: var(--radio);
+    font-size: 13px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.producto-info.oculto { display: none; }
+.prod-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 11px;
+    color: #fff;
+}
+.prod-tipo-cp   { background: #c0392b; }
+.prod-tipo-dp   { background: #e67e22; }
+.prod-tipo-dcrp { background: #8e44ad; }
+.prod-tipo-00   { background: #27ae60; }
+.prod-peligrosa { color: #c0392b; font-weight: 700; font-size: 12px; }
+.prod-detalle   { color: #5a6b7e; }

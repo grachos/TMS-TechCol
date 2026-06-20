@@ -30,9 +30,26 @@ final class CatalogoRepo
     }
 
     /**
+     * Obtiene un producto por su código.
+     * @return array<string,string|null>|null
+     */
+    public function productoPorCodigo(string $codigo): ?array
+    {
+        if ($codigo === '') { return null; }
+        $stmt = db()->prepare(
+            "SELECT codigo, nombre, tipo, peligrosa, clase_division,
+                    peligro_secundario, grupo_embalaje, alerta
+             FROM producto WHERE codigo = ?"
+        );
+        $stmt->execute([$codigo]);
+        $r = $stmt->fetch();
+        return $r ?: null;
+    }
+
+    /**
      * Busca productos por nombre o código (autocompletado).
      *
-     * @return list<array{codigo:string,nombre:string,label:string}>
+     * @return list<array{codigo:string,nombre:string,tipo:string,peligrosa:string,clase_division:string,peligro_secundario:string,grupo_embalaje:string,alerta:string,label:string}>
      */
     public function buscarProductos(string $q, int $limite = 15): array
     {
@@ -42,7 +59,9 @@ final class CatalogoRepo
         }
         $like = '%' . $q . '%';
         $stmt = db()->prepare(
-            "SELECT codigo, nombre FROM producto
+            "SELECT codigo, nombre, tipo, peligrosa, clase_division,
+                    peligro_secundario, grupo_embalaje, alerta
+             FROM producto
              WHERE nombre <> '' AND (nombre LIKE ? OR codigo LIKE ?)
              ORDER BY nombre LIMIT " . (int) $limite
         );

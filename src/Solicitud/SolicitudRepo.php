@@ -28,7 +28,6 @@ final class SolicitudRepo
         'horas_pacto_cargue', 'minutos_pacto_cargue',
         'horas_pacto_descargue', 'minutos_pacto_descargue',
         'responsable_pago_cargue', 'responsable_pago_descargue',
-        'tomador_poliza',
     ];
 
     /**
@@ -71,6 +70,10 @@ final class SolicitudRepo
         }
         if (empty($fila['fecha_solicitud'])) {
             $fila['fecha_solicitud'] = date('Y-m-d');
+        }
+        // Auto-generar consecutivo desde el contador de la empresa.
+        if (empty($fila['consecutivo'])) {
+            $fila['consecutivo'] = (new EmpresaRepo())->siguienteRemesa();
         }
         // Retenciones calculadas en el servidor (no se confía en el cliente).
         $flete = (float) ($fila['valor_flete'] ?? 0);
@@ -201,7 +204,6 @@ final class SolicitudRepo
             // Datos completados al confirmar el despacho (Fase 4):
             'propietario_tipo_id'    => $s['propietario_carga_tipo_id'] ?? null,
             'propietario_num_id'     => $s['propietario_carga_num_id'] ?? null,
-            'tomador_poliza'         => $s['tomador_poliza'] ?? null,
             'fecha_cita_cargue'      => $s['fecha_cita_cargue'] ?? null,
             'hora_cita_cargue'       => $s['hora_cita_cargue'] ?? null,
             'fecha_cita_descargue'   => $s['fecha_cita_descargue'] ?? null,

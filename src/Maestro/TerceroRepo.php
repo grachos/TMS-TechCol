@@ -130,11 +130,7 @@ final class TerceroRepo
             'LATITUD'                  => $t['latitud'],
             'LONGITUD'                 => $t['longitud'],
         ];
-        if ((int) $t['es_conductor'] === 1) {
-            $vars['NOMCATEGORIALICENCIACONDUCCION'] = $t['categoria_licencia'];
-            $vars['NUMLICENCIACONDUCCION']          = $t['num_licencia'];
-            $vars['FECHAVENCIMIENTOLICENCIA']       = self::fechaRndc($t['fecha_venc_licencia']);
-        }
+
 
         $resp = $rndc->ingresar(11, $vars);
 

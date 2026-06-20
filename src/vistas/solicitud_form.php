@@ -10,7 +10,9 @@ $s      = $solicitud ?? [];
 $accion = $accion ?? ruta('solicitud.crear');
 $editar = !empty($s);
 $muni   = new MunicipioRepo();
-$empaques = (new CatalogoRepo())->empaques();
+$cat    = new CatalogoRepo();
+$empaques = $cat->empaques();
+$prodInfo = $editar && !empty($s['mercancia_codigo']) ? $cat->productoPorCodigo($s['mercancia_codigo']) : null;
 
 $v   = static fn (string $c): string => e((string) ($GLOBALS['s'][$c] ?? ''));
 /** valor guardado o, si no hay, el default (para selects). */
@@ -124,6 +126,22 @@ if (!function_exists('acMunicipioP')) {
                     <input type="text" class="ac-texto" autocomplete="off" placeholder="Buscar producto…">
                     <ul class="ac-lista"></ul>
                     <input type="text" name="mercancia_codigo" data-ac-field="codigo" maxlength="10" placeholder="Código" value="<?= $v('mercancia_codigo') ?>">
+                    <input type="hidden" data-ac-field="tipo">
+                    <input type="hidden" data-ac-field="clase_division">
+                    <input type="hidden" data-ac-field="peligro_secundario">
+                    <input type="hidden" data-ac-field="grupo_embalaje">
+                    <input type="hidden" data-ac-field="peligrosa">
+                </div>
+                <div id="producto-info" class="producto-info<?= $prodInfo ? '' : ' oculto' ?>">
+                    <?php if ($prodInfo): ?>
+                        <span class="prod-badge prod-tipo-<?= e(strtolower($prodInfo['tipo'] ?? '')) ?>"><?= e($prodInfo['tipo'] ?? '') ?></span>
+                        <?php if ($prodInfo['peligrosa'] === 'SI'): ?>
+                            <span class="prod-peligrosa">&#9888; Peligrosa</span>
+                        <?php endif; ?>
+                        <span class="prod-detalle">Clase: <?= e($prodInfo['clase_division'] ?? '—') ?></span>
+                        <span class="prod-detalle">Peligro sec.: <?= e($prodInfo['peligro_secundario'] ?? '—') ?></span>
+                        <span class="prod-detalle">Embalaje: <?= e($prodInfo['grupo_embalaje'] ?? '—') ?></span>
+                    <?php endif; ?>
                 </div>
             </label>
             <label class="ancho-total">Descripción del producto <input type="text" name="descripcion_producto" maxlength="250" value="<?= $v('descripcion_producto') ?>"></label>
@@ -155,3 +173,28 @@ if (!function_exists('acMunicipioP')) {
         <a href="<?= e($editar ? ruta('solicitud.ver', ['id' => (int) $s['id']]) : ruta('solicitudes')) ?>" class="btn">Cancelar</a>
     </div>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var caja = document.querySelector('[data-ac="productos"]');
+    var info = document.getElementById('producto-info');
+    if (!caja || !info) { return; }
+
+    caja.addEventListener('ac:select', function (e) {
+        var p = e.detail || {};
+        var html = '';
+        var tipo = (p.tipo || '').trim();
+        if (tipo) {
+            html += '<span class="prod-badge prod-tipo-' + tipo.toLowerCase() + '">' + tipo + '</span>';
+        }
+        if (p.peligrosa === 'SI') {
+            html += ' <span class="prod-peligrosa">\u26A0 Peligrosa</span>';
+        }
+        html += ' <span class="prod-detalle">Clase: ' + (p.clase_division || '\u2014') + '</span>';
+        html += ' <span class="prod-detalle">Peligro sec.: ' + (p.peligro_secundario || '\u2014') + '</span>';
+        html += ' <span class="prod-detalle">Embalaje: ' + (p.grupo_embalaje || '\u2014') + '</span>';
+        info.innerHTML = html;
+        info.classList.remove('oculto');
+    });
+});
+</script>

@@ -14,27 +14,41 @@ La **Solicitud de Servicio** se captura **una sola vez** y siembra automáticame
 
 Pensado para **hosting web/cloud de Hostinger** (LAMP administrado):
 
-- **PHP** (sin Composer; se sube por FTP/File Manager)
+- **PHP 8.x** (sin Composer; se sube por FTP/File Manager)
 - **MariaDB** (compatible MySQL), administrada con **phpMyAdmin**
 - Cliente RNDC en PHP (SOAP/XML)
 - **Cron job** de Hostinger para el worker de reintento
+- Sin autenticación ni CSRF (gaps conocidos, no abordados aún)
 
 ## Estructura
 
 ```
 light-tms/
 ├── public/                  <- document root del dominio
-│   ├── index.php            tablero de inicio (verifica BD)
-│   └── assets/css/styles.css
+│   ├── index.php            front-controller (ruteo via ?r=)
+│   └── assets/
+│       ├── css/styles.css
+│       └── js/app.js        autocompletado, mapa, cálculos
 ├── src/
 │   ├── config.php           carga .env + config()
 │   ├── db.php               conexión PDO a MariaDB
+│   ├── vista.php            layout + helpers
 │   ├── helpers.php          utilidades
-│   └── Rndc/RndcClient.php  cliente RNDC (Fase 2)
+│   ├── Maestro/             repositorios (Empresa, Tercero, Vehículo, Municipio, Catálogo)
+│   ├── Solicitud/           SolicitudRepo (captura única → siembra remesa+manifiesto)
+│   ├── Despacho/            ColaRepo (store-and-forward, payload XML)
+│   ├── Rndc/                Diccionario, RndcClient (SOAP/XML), RenderVariables
+│   └── vistas/              templates PHP (solicitud, cola, empresa, etc.)
 ├── cron/
 │   └── retry_worker.php     worker store-and-forward (Fase 4)
 ├── sql/
-│   └── schema.sql           tablas (importar en phpMyAdmin)
+│   ├── schema.sql           tablas base
+│   ├── catalogos.sql        catálogos (empaque, carrocería, config vehicular, producto, errores RNDC)
+│   ├── importar_productos_csv.php  importa catálogo de productos desde CSV oficial del RNDC
+│   ├── municipios.sql       DIVIPOLA
+│   ├── maestros.sql         tercero + vehículo
+│   ├── catalogo_configuracion.sql  configuraciones de unidad de carga
+│   └── migracion_v*.sql     migraciones incrementales (v2–v12)
 ├── .env.example
 └── README.md
 ```
@@ -52,16 +66,34 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
 
 1. Copia `.env.example` a `.env` y completa los datos de la BD.
 2. Crea la base de datos e importa, en orden, los SQL de `sql/`:
-   `schema.sql` (documentos), `municipios.sql` (catálogo DIVIPOLA),
-   `maestros.sql` (Tercero y Vehículo), `catalogos.sql`
-   (empaque, carrocería, producto, errores RNDC), `productos_subpartidas.sql`
-   (mercancía general), `migracion_v2.sql`, `migracion_v3.sql`
-   (campos de despacho, maestro_empresa, retenciones), `migracion_v4.sql`
-   (vehículo solo requeridos + remolque), `migracion_v5.sql`
-   (quita marca/modelo del vehículo), `migracion_v6.sql`
-   (estado 'despachada' en la solicitud), `migracion_v7.sql`
-   (cola de envíos ligada a la solicitud) y `catalogo_configuracion.sql`
-   (configuración de unidad de carga).
+
+   | Orden | Archivo | Descripción |
+   |-------|---------|-------------|
+   | 1 | `schema.sql` | Tablas base (solicitud, remesa, manifiesto, cola) |
+   | 2 | `municipios.sql` | Catálogo DIVIPOLA |
+   | 3 | `maestros.sql` | Tercero y Vehículo |
+   | 4 | `catalogos.sql` | Catálogos (empaque, carrocería, producto — estructura, errores RNDC) |
+   | 5 | `catalogo_configuracion.sql` | Configuraciones de unidad de carga |
+   | 6 | `importar_productos_csv.php` | **Importar catálogo de productos** desde CSV oficial del RNDC |
+   | 7 | `migracion_v2.sql` | Primeros ajustes de esquema |
+   | 8 | `migracion_v3.sql` | Campos de despacho, maestro_empresa, retenciones |
+   | 9 | `migracion_v4.sql` | Vehículo: solo requeridos + remolque |
+   | 10 | `migracion_v5.sql` | Quita marca/modelo del vehículo |
+   | 11 | `migracion_v6.sql` | Estado `despachada` en solicitud |
+   | 12 | `migracion_v7.sql` | Cola de envíos ligada a solicitud |
+   | 13 | `migracion_v8.sql` | Tiempo pactado cargue |
+   | 14 | `migracion_v9.sql` | Elimina `REMDUENOPOLIZA` (`tomador_poliza`) |
+   | 15 | `migracion_v10.sql` | Consecutivos `consecutivo_remesa`, `consecutivo_manifiesto` en empresa |
+   | 16 | `migracion_v11.sql` | `radicado_remesa` en empresa |
+   | 17 | `migracion_v12.sql` | **Reestructura tabla `producto`** con columnas del CSV oficial RNDC |
+
+   > La migración v12 reemplaza la tabla `producto` completa. Después de ejecutarla,
+   > corre el script `importar_productos_csv.php` para poblar los 3758 productos desde
+   > el archivo `Maestro_Codificación de Productos_RNDC.csv`:
+   > ```bash
+   > php sql/importar_productos_csv.php /ruta/al/Maestro_Codificación_de_Productos_RNDC.csv
+   > ```
+
 3. Sirve la carpeta `public/`:
    ```bash
    php -S localhost:8000 -t public
@@ -87,6 +119,17 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
 - [x] **Fase 2** — Cliente RNDC (SOAP/XML + `<acceso>`) — ver [docs/RNDC.md](docs/RNDC.md)
 - [x] **Fase 3** — Flujo Solicitud de Servicio (captura única → siembra Manifiesto + Remesa)
 - [x] **Fase 4** — Confirmar despacho → cola store-and-forward → worker de envío al RNDC
+- [x] **Correcciones post-integración RNDC:**
+  - Eliminado `REMDUENOPOLIZA` (`tomador_poliza`) del XML, BD, formulario y diccionario (v9)
+  - Corregido error REM020: `CONSECUTIVOREMESA` ahora se envía desde `remesa.num_remesa`
+  - Visor XML en cola.xml: muestra el XML enviado junto a la respuesta de RNDC en errores
+  - Contadores auto-incrementales en empresa: `consecutivo_remesa`, `consecutivo_manifiesto` (v10) y `radicado_remesa` (v11)
+- [x] **Catálogo de productos RNDC actualizado:**
+  - Tabla `producto` reestructurada con 16 columnas del CSV oficial (v12)
+  - 3758 productos cargados: CP (carga peligrosa), DP (desecho peligroso), DCRP (desagregación) y 00 (general)
+  - Nuevos campos: `tipo`, `partida`, `clase_division`, `peligro_secundario`, `grupo_embalaje`, etc.
+  - Script `importar_productos_csv.php` para importar desde CSV del RNDC (conversión W1252→UTF-8)
+  - Autocompletado del formulario ahora muestra tipo (con badge de color), clase, peligrosidad y embalaje
 
 > El cliente RNDC (`src/Rndc/RndcClient.php`) está verificado de extremo a extremo
 > contra el servidor real del RNDC con credenciales válidas en `.env`.
@@ -105,3 +148,33 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
    - `false` (por defecto) → *modo seguro*: arma y previsualiza el XML pero **no**
      lo envía. Útil para revisar el XML antes de escribir en el RNDC.
    - `true` → envío real al RNDC (según `RNDC_AMBIENTE`).
+5. Cuando un envío falla, la vista `cola.xml` muestra **el XML enviado** junto con
+   la respuesta de error del RNDC, facilitando la depuración.
+
+### Consecutivos automáticos
+
+Cada empresa tiene tres contadores que se auto-incrementan al crear una solicitud:
+
+| Contador | Columna en `maestro_empresa` | Uso |
+|----------|------------------------------|-----|
+| Remesa | `consecutivo_remesa` | `num_remesa` en la remesa |
+| Manifiesto | `consecutivo_manifiesto` | `num_manifiesto` en el manifiesto |
+| Radicado remesa | `radicado_remesa` | `consecutivoRemesa` en el XML de RNDC |
+
+Si el usuario deja vacío el campo "Consecutivo" en la solicitud, se genera automáticamente
+desde el contador correspondiente de la empresa.
+
+### Catálogo de productos
+
+La tabla `producto` se alimenta del archivo CSV oficial del RNDC
+(`Maestro_Codificación de Productos_RNDC.csv`). Contiene 3758 productos clasificados por tipo:
+
+| Tipo | Significado | Cantidad |
+|------|-------------|----------|
+| `00` | Mercancía general (subpartidas arancelarias) | 1264 |
+| `CP` | Carga peligrosa (clase ONU) | 2347 |
+| `DP` | Desechos peligrosos | 107 |
+| `DCRP` | Desagregación de corrientes de residuo peligroso | 40 |
+
+Al seleccionar un producto en el formulario de solicitud, se muestra su tipo (con badge
+de color), clase/división, peligro secundario y grupo de embalaje/envase.

@@ -15,6 +15,7 @@ require_once __DIR__ . '/../src/Maestro/VehiculoRepo.php';
 require_once __DIR__ . '/../src/Maestro/CatalogoRepo.php';
 require_once __DIR__ . '/../src/Maestro/EmpresaRepo.php';
 require_once __DIR__ . '/../src/Despacho/ColaRepo.php';
+require_once __DIR__ . '/../src/Rndc/RndcClient.php';
 
 $r = $_GET['r'] ?? 'inicio';
 
@@ -346,9 +347,19 @@ try {
                 echo 'No encontrado.';
                 break;
             }
-            echo $f['respuesta_rndc'] !== null && $f['respuesta_rndc'] !== ''
-                ? $f['respuesta_rndc']
-                : "Sin previsualización. Procesa la cola (en modo seguro genera el XML).\n\nFragmento <variables>:\n" . $f['payload_xml'];
+            if ($f['respuesta_rndc'] !== null && $f['respuesta_rndc'] !== '') {
+                echo "=== XML ENVIADO (reconstruido) ===\n\n";
+                try {
+                    $rndc = RndcClient::desdeConfig();
+                    echo $rndc->previewXmlInterno((int) $f['proceso_rndc'], (string) $f['payload_xml']);
+                } catch (Throwable) {
+                    echo "(Fragmento <variables>):\n" . $f['payload_xml'];
+                }
+                echo "\n\n=== RESPUESTA DEL RNDC ===\n\n";
+                echo $f['respuesta_rndc'];
+            } else {
+                echo "Sin previsualización. Procesa la cola (en modo seguro genera el XML).\n\nFragmento <variables>:\n" . $f['payload_xml'];
+            }
             break;
 
         case 'empresa':

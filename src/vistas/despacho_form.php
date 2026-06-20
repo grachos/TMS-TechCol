@@ -13,7 +13,6 @@ $s = $solicitud;
 $v = static fn (string $c): string => e((string) ($s[$c] ?? ''));
 
 $responsables = ['E' => 'Empresa de transporte', 'R' => 'Remitente', 'D' => 'Destinatario'];
-$duenosPoliza = ['E' => 'Empresa de transporte', 'R' => 'Remitente', 'D' => 'Destinatario', 'P' => 'Propietario'];
 
 if (!function_exists('selOpc')) {
     function selOpc(string $name, array $opciones, string $sel, bool $conVacio = true): string
@@ -71,7 +70,6 @@ $acTercero = static function (string $tipoName, string $numName, string $tipo, s
         <legend>Propietario de la carga</legend>
         <div class="grid">
             <label class="ancho-total">Propietario <?= $acTercero('propietario_carga_tipo_id', 'propietario_carga_num_id', (string) ($s['propietario_carga_tipo_id'] ?? ''), (string) ($s['propietario_carga_num_id'] ?? '')) ?></label>
-            <label>Dueño de la póliza <?= selOpc('tomador_poliza', $duenosPoliza, (string) ($s['tomador_poliza'] ?? 'E'), false) ?></label>
         </div>
     </fieldset>
 

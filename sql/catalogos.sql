@@ -133,10 +133,29 @@ INSERT INTO carroceria (codigo, descripcion) VALUES
 ('1','ESTACAS'),
 ('0','SIN CARROCERIA');
 DROP TABLE IF EXISTS producto;
-CREATE TABLE producto (id INT AUTO_INCREMENT PRIMARY KEY, codigo VARCHAR(10) NOT NULL, nombre VARCHAR(400) NOT NULL, capitulo VARCHAR(200) NULL, peligrosa VARCHAR(3) NULL, aplica_sicetac VARCHAR(3) NULL, KEY idx_prod_cod (codigo), KEY idx_prod_nom (nombre(60))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-INSERT INTO producto (codigo, nombre, capitulo, peligrosa, aplica_sicetac) VALUES
-('3540','ARTÍCULOS QUE CONTIENEN LÍQUIDOS INFLAMABLES, N.E.P.','CLASE 3 - LÍQUIDOS INFLAMABLES','SI',' '),
-('3560','HIDRÓXIDO DE TETRAMETILAMONIO EN SOLUCIÓN ACUOSA con un mínimo del 25 % de hidróxido de tetrametilamonio','CLASE 6 - SUSTANCIAS TÓXICAS Y SUSTANCIAS INFECCIOSAS','SI',' '),
+CREATE TABLE producto (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    codigo VARCHAR(10) NOT NULL,
+    nombre VARCHAR(400) NOT NULL COMMENT '[NOMBREYDESCRIPCION]',
+    tipo VARCHAR(4) NULL COMMENT 'CP=carga peligrosa, DP=desecho peligroso, DCRP=desagregacion corriente, 00=general',
+    capitulo VARCHAR(200) NULL,
+    partida VARCHAR(400) NULL,
+    aplica_sicetac VARCHAR(3) NULL,
+    necesita_subpartida VARCHAR(3) NULL,
+    hidrocarburo VARCHAR(3) NULL,
+    unidad_galones VARCHAR(3) NULL,
+    impoconsumo VARCHAR(3) NULL,
+    peligrosa VARCHAR(3) NULL COMMENT '[MERCANCIAPELIGROSA]',
+    clase_division VARCHAR(10) NULL COMMENT '[CLASEDIVISION]',
+    peligro_secundario VARCHAR(10) NULL COMMENT '[PELIGROSECUNDARIO]',
+    grupo_embalaje VARCHAR(5) NULL COMMENT '[GRUPOEMBALAJEENVASE]',
+    alerta VARCHAR(3) NULL,
+    fecha_ingreso DATETIME NULL,
+    KEY idx_prod_cod (codigo),
+    KEY idx_prod_nom (nombre(60))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Los datos se importan desde el CSV oficial del RNDC mediante importar_productos_csv.php.
+-- (Ver migracion_v12.sql + importar_productos_csv.php)
 ('3559','DISPOSITIVOS DE DISPERSIÓN DE AGENTES EXTINTORES','CLASE 9 - SUSTANCIAS Y OBJETOS PELIGROSOS VARIOS','SI',' '),
 ('3558','VEHÍCULO PROPULSADO POR BATERÍA DE IÓN SODIO','CLASE 9 - SUSTANCIAS Y OBJETOS PELIGROSOS VARIOS','SI',' '),
 ('3557','VEHÍCULO PROPULSADO POR BATERÍA DE METAL LITIO','CLASE 9 - SUSTANCIAS Y OBJETOS PELIGROSOS VARIOS','SI',' '),

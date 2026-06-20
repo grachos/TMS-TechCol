@@ -58,6 +58,7 @@
                             h.value = it[h.getAttribute('data-ac-field')] || '';
                         });
                         lista.innerHTML = '';
+                        caja.dispatchEvent(new CustomEvent('ac:select', { detail: it }));
                     });
                     lista.appendChild(li);
                 });

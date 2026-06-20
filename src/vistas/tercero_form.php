@@ -92,11 +92,6 @@ if (!function_exists('selTipoT')) {
         <label class="check">
             <input type="checkbox" name="es_conductor" value="1" id="chk-conductor" <?= ((int) ($t['es_conductor'] ?? 0) === 1) ? 'checked' : '' ?>> Sí, este tercero es conductor
         </label>
-        <div class="grid" id="campos-conductor" style="margin-top:10px;">
-            <label>Categoría licencia <input type="text" name="categoria_licencia" maxlength="3" value="<?= $v('categoria_licencia') ?>"></label>
-            <label>Número licencia <input type="text" name="num_licencia" maxlength="20" value="<?= $v('num_licencia') ?>"></label>
-            <label>Vencimiento licencia <input type="date" name="fecha_venc_licencia" value="<?= $v('fecha_venc_licencia') ?>"></label>
-        </div>
     </fieldset>
 
     <div class="acciones">
@@ -105,11 +100,3 @@ if (!function_exists('selTipoT')) {
     </div>
 </form>
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var chk = document.getElementById('chk-conductor');
-    var cc = document.getElementById('campos-conductor');
-    function tog(){ cc.style.display = chk.checked ? '' : 'none'; }
-    if (chk) { chk.addEventListener('change', tog); tog(); }
-});
-</script>
