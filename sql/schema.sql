@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS solicitud_servicio (
 
     -- Valores
     valor_flete          DECIMAL(14,2) NULL COMMENT '[VALORFLETEPACTADOVIAJE]',
-    valor_anticipo       DECIMAL(14,2) NULL COMMENT '[VALORANTICIPOMANIFIESTO]',
 
     estado               ENUM('borrador','procesada','despachada','anulada') NOT NULL DEFAULT 'borrador',
     observaciones        TEXT NULL,

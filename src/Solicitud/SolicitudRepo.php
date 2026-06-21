@@ -28,7 +28,6 @@ final class SolicitudRepo
         'horas_pacto_cargue', 'minutos_pacto_cargue',
         'horas_pacto_descargue', 'minutos_pacto_descargue',
         'responsable_pago_cargue', 'responsable_pago_descargue',
-        'valor_anticipo',
     ];
 
     /**
@@ -180,6 +179,7 @@ final class SolicitudRepo
             $stmt = $pdo->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
             $stmt->execute([$id]);
             $s = $stmt->fetch();
+            $s['valor_anticipo'] = $datos['valor_anticipo'] ?? null;
 
             $pdo->prepare('DELETE FROM remesa WHERE solicitud_id = ?')->execute([$id]);
             $pdo->prepare('DELETE FROM manifiesto WHERE solicitud_id = ?')->execute([$id]);
