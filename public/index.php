@@ -303,6 +303,10 @@ try {
                 break;
             }
             $solicitud = $datos['solicitud'];
+            if (empty($solicitud['emf'])) {
+                $empresa = (new EmpresaRepo())->obtener();
+                $solicitud['emf'] = $empresa['emf'] ?? '';
+            }
             layout_top('Confirmar despacho', 'solicitudes');
             require __DIR__ . '/../src/vistas/despacho_form.php';
             layout_bottom();
