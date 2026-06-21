@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS solicitud_servicio (
     naturaleza_carga     VARCHAR(2)   NULL  COMMENT '[CODNATURALEZACARGA]',
     descripcion_producto VARCHAR(250) NULL  COMMENT '[DESCRIPCIONCORTAPRODUCTO]',
     cantidad_vehiculos     INT NOT NULL DEFAULT 1 COMMENT 'Vehículos/dispachos restantes',
+    cantidad_vehiculos_original INT NOT NULL DEFAULT 1 COMMENT 'Valor inicial del contador de vehículos',
     unidad_medida        VARCHAR(2)   NULL  COMMENT '[CODUNIDADMEDIDACAPACIDAD]',
 
     -- Valores

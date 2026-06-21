@@ -40,6 +40,7 @@ $hasta = $_GET['hasta'] ?? '';
                 <th>Destino</th>
                 <th>Generador de carga</th>
                 <th>Flete</th>
+                <th>Vehículos</th>
                 <th>Estado</th>
                 <th></th>
             </tr>
@@ -58,6 +59,11 @@ $hasta = $_GET['hasta'] ?? '';
                         echo e($g && $gn ? $g . ' ' . $gn . ($s['generador_nombre'] ? ' - ' . $s['generador_nombre'] : '') : '—');
                     ?></td>
                     <td><?= $s['valor_flete'] !== null ? e('$ ' . number_format((float) $s['valor_flete'], 2)) : '—' ?></td>
+                    <td><?php
+                        $rest = (int) ($s['cantidad_vehiculos'] ?? 0);
+                        $orig = (int) ($s['cantidad_vehiculos_original'] ?? $rest);
+                        echo e($rest . '/' . $orig);
+                    ?></td>
                     <td><span class="chip chip--<?= e($s['estado']) ?>"><?= e($s['estado']) ?></span></td>
                     <td>
                         <a href="<?= e(ruta('solicitud.ver', ['id' => (int) $s['id']])) ?>">Ver</a>

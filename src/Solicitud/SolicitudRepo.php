@@ -94,6 +94,7 @@ final class SolicitudRepo
     public function crear(array $datos): int
     {
         $fila = $this->prepararFila($datos);
+        $fila['cantidad_vehiculos_original'] = (int) ($fila['cantidad_vehiculos'] ?? 1);
 
         $pdo = db();
         $pdo->beginTransaction();
@@ -287,6 +288,7 @@ final class SolicitudRepo
         $sql = 'SELECT s.id, s.consecutivo, s.fecha_solicitud,
                        s.municipio_origen, s.municipio_destino,
                        s.valor_flete, s.placa_vehiculo, s.estado,
+                       s.cantidad_vehiculos, s.cantidad_vehiculos_original,
                        s.generador_tipo_id, s.generador_num_id,
                        r.nombre AS remitente_nombre,
                        d.nombre AS destinatario_nombre,
