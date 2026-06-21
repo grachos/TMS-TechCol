@@ -46,9 +46,18 @@ $estados = ['L' => 'Líquido', 'S' => 'Sólido/semi-sólido', 'G' => 'Gaseoso'];
     </tbody>
 </table>
 <?php if ($paginas > 1): ?>
+<?php $bloque = (int) ceil($pagina / 10);
+$inicio = ($bloque - 1) * 10 + 1;
+$fin = min($bloque * 10, $paginas); ?>
 <nav class="paginacion">
-    <?php for ($i = 1; $i <= $paginas; $i++): ?>
+    <?php if ($bloque > 1): ?>
+        <a href="<?= e(ruta('productos', ['q' => $q, 'p' => $inicio - 1])) ?>" class="btn btn--small">&laquo;</a>
+    <?php endif; ?>
+    <?php for ($i = $inicio; $i <= $fin; $i++): ?>
         <a href="<?= e(ruta('productos', ['q' => $q, 'p' => $i])) ?>" class="btn btn--small<?= $i === $pagina ? ' btn--activo' : '' ?>"><?= $i ?></a>
     <?php endfor; ?>
+    <?php if ($fin < $paginas): ?>
+        <a href="<?= e(ruta('productos', ['q' => $q, 'p' => $fin + 1])) ?>" class="btn btn--small">&raquo;</a>
+    <?php endif; ?>
 </nav>
 <?php endif; ?>
