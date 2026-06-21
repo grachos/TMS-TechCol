@@ -40,7 +40,7 @@ $hasta = $_GET['hasta'] ?? '';
                 <th>Destino</th>
                 <th>Generador de carga</th>
                 <th>Flete</th>
-                <th>Vehículos</th>
+                <th>Despachos</th>
                 <th>Estado</th>
                 <th></th>
             </tr>
@@ -62,7 +62,8 @@ $hasta = $_GET['hasta'] ?? '';
                     <td><?php
                         $rest = (int) ($s['cantidad_vehiculos'] ?? 0);
                         $orig = (int) ($s['cantidad_vehiculos_original'] ?? $rest);
-                        echo e($rest . '/' . $orig);
+                        $done = max(0, $orig - $rest);
+                        echo e($done . '/' . $orig);
                     ?></td>
                     <td><span class="chip chip--<?= e($s['estado']) ?>"><?= e($s['estado']) ?></span></td>
                     <td>
