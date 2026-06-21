@@ -129,6 +129,8 @@ if (!function_exists('acMunicipioP')) {
                     <input type="hidden" data-ac-field="peligro_secundario">
                     <input type="hidden" data-ac-field="grupo_embalaje">
                     <input type="hidden" data-ac-field="peligrosa">
+                    <input type="hidden" data-ac-field="codigo_un">
+                    <input type="hidden" data-ac-field="estado_producto">
                 </div>
                 <div id="producto-info" class="producto-info<?= $prodInfo ? '' : ' oculto' ?>">
                     <?php if ($prodInfo): ?>
@@ -139,9 +141,25 @@ if (!function_exists('acMunicipioP')) {
                         <span class="prod-detalle">Clase: <?= e($prodInfo['clase_division'] ?? '—') ?></span>
                         <span class="prod-detalle">Peligro sec.: <?= e($prodInfo['peligro_secundario'] ?? '—') ?></span>
                         <span class="prod-detalle">Embalaje: <?= e($prodInfo['grupo_embalaje'] ?? '—') ?></span>
+                        <span class="prod-detalle">UN: <?= e($prodInfo['codigo_un'] ?? '—') ?></span>
+                        <span class="prod-detalle">Estado: <?= e(['L'=>'Líquido','S'=>'Sólido/semi-sólido','G'=>'Gaseoso'][$prodInfo['estado_producto'] ?? ''] ?? '—') ?></span>
                     <?php endif; ?>
                 </div>
             </label>
+            <div id="campos-peligrosa" class="grid<?= ($s['naturaleza_carga'] ?? '1') === '2' ? '' : ' oculto' ?>">
+                <label>Código UN
+                    <input type="text" name="codigo_un" maxlength="5" value="<?= $v('codigo_un') ?>">
+                    <small>Obligatorio si naturaleza = Carga peligrosa</small>
+                </label>
+                <label>Estado del producto
+                    <select name="estado_producto">
+                        <option value="">—</option>
+                        <option value="L"<?= ($s['estado_producto'] ?? '') === 'L' ? ' selected' : '' ?>>Líquido</option>
+                        <option value="S"<?= ($s['estado_producto'] ?? '') === 'S' ? ' selected' : '' ?>>Sólido o semi sólido</option>
+                        <option value="G"<?= ($s['estado_producto'] ?? '') === 'G' ? ' selected' : '' ?>>Gaseoso</option>
+                    </select>
+                </label>
+            </div>
             <label class="ancho-total">Descripción del producto <input type="text" name="descripcion_producto" maxlength="250" value="<?= $v('descripcion_producto') ?>"></label>
             <label>Cantidad vehículos <input type="number" step="1" name="cantidad_vehiculos" value="<?= $v('cantidad_vehiculos') ?>"></label>
             <label>Unidad de medida <?= selOpc('unidad_medida', $unidades, $cur('unidad_medida', '1')) ?></label>
@@ -175,6 +193,21 @@ if (!function_exists('acMunicipioP')) {
 document.addEventListener('DOMContentLoaded', function () {
     var caja = document.querySelector('[data-ac="productos"]');
     var info = document.getElementById('producto-info');
+    var peligrosaGrupo = document.getElementById('campos-peligrosa');
+    var naturaSelect = document.querySelector('[name="naturaleza_carga"]');
+    var codigoUnInput = document.querySelector('[name="codigo_un"]');
+    var estadoProdSelect = document.querySelector('[name="estado_producto"]');
+
+    function togglePeligrosa() {
+        if (peligrosaGrupo && naturaSelect) {
+            peligrosaGrupo.classList.toggle('oculto', naturaSelect.value !== '2');
+        }
+    }
+    togglePeligrosa();
+    if (naturaSelect) {
+        naturaSelect.addEventListener('change', togglePeligrosa);
+    }
+
     if (!caja || !info) { return; }
 
     caja.addEventListener('ac:select', function (e) {
@@ -190,8 +223,13 @@ document.addEventListener('DOMContentLoaded', function () {
         html += ' <span class="prod-detalle">Clase: ' + (p.clase_division || '\u2014') + '</span>';
         html += ' <span class="prod-detalle">Peligro sec.: ' + (p.peligro_secundario || '\u2014') + '</span>';
         html += ' <span class="prod-detalle">Embalaje: ' + (p.grupo_embalaje || '\u2014') + '</span>';
+        html += ' <span class="prod-detalle">UN: ' + (p.codigo_un || '\u2014') + '</span>';
+        html += ' <span class="prod-detalle">Estado: ' + ({L:'L\u00edquido',S:'S\u00f3lido/semi-s\u00f3lido',G:'Gaseoso'}[p.estado_producto] || '\u2014') + '</span>';
         info.innerHTML = html;
         info.classList.remove('oculto');
+
+        if (codigoUnInput && p.codigo_un) codigoUnInput.value = p.codigo_un;
+        if (estadoProdSelect && p.estado_producto) estadoProdSelect.value = p.estado_producto;
     });
 });
 </script>

@@ -48,7 +48,8 @@ final class CatalogoRepo
         if ($codigo === '') { return null; }
         $stmt = db()->prepare(
             "SELECT codigo, nombre, tipo, peligrosa, clase_division,
-                    peligro_secundario, grupo_embalaje, alerta
+                    peligro_secundario, grupo_embalaje, alerta,
+                    codigo_un, estado_producto
              FROM producto WHERE codigo = ?"
         );
         $stmt->execute([$codigo]);
@@ -59,7 +60,7 @@ final class CatalogoRepo
     /**
      * Busca productos por nombre o código (autocompletado).
      *
-     * @return list<array{codigo:string,nombre:string,tipo:string,peligrosa:string,clase_division:string,peligro_secundario:string,grupo_embalaje:string,alerta:string,label:string}>
+     * @return list<array{codigo:string,nombre:string,tipo:string,peligrosa:string,clase_division:string,peligro_secundario:string,grupo_embalaje:string,alerta:string,codigo_un:string,estado_producto:string,label:string}>
      */
     public function buscarProductos(string $q, int $limite = 15): array
     {
@@ -70,7 +71,8 @@ final class CatalogoRepo
         $like = '%' . $q . '%';
         $stmt = db()->prepare(
             "SELECT codigo, nombre, tipo, peligrosa, clase_division,
-                    peligro_secundario, grupo_embalaje, alerta
+                    peligro_secundario, grupo_embalaje, alerta,
+                    codigo_un, estado_producto
              FROM producto
              WHERE nombre <> '' AND (nombre LIKE ? OR codigo LIKE ?)
              ORDER BY nombre LIMIT " . (int) $limite
@@ -81,5 +83,42 @@ final class CatalogoRepo
             $f['label'] = $f['codigo'] . ' — ' . $f['nombre'];
         }
         return $filas;
+    }
+
+    /**
+     * Actualiza codigo_un y estado_producto de un producto.
+     * @param array{codigo_un:string,estado_producto:string} $datos
+     */
+    public function actualizarProducto(string $codigo, array $datos): void
+    {
+        $stmt = db()->prepare(
+            'UPDATE producto SET codigo_un = ?, estado_producto = ? WHERE codigo = ?'
+        );
+        $stmt->execute([
+            trim((string) ($datos['codigo_un'] ?? '')) ?: null,
+            trim((string) ($datos['estado_producto'] ?? '')) ?: null,
+            $codigo,
+        ]);
+    }
+
+    /** @return list<array{codigo:string,nombre:string,tipo:string,codigo_un:string,estado_producto:string}> */
+    public function listarProductos(string $q = '', int $limite = 50): array
+    {
+        if ($q === '') {
+            $stmt = db()->query(
+                "SELECT codigo, nombre, tipo, codigo_un, estado_producto
+                 FROM producto WHERE nombre <> ''
+                 ORDER BY codigo LIMIT " . (int) $limite
+            );
+        } else {
+            $like = '%' . $q . '%';
+            $stmt = db()->prepare(
+                "SELECT codigo, nombre, tipo, codigo_un, estado_producto
+                 FROM producto WHERE nombre <> '' AND (nombre LIKE ? OR codigo LIKE ?)
+                 ORDER BY codigo LIMIT " . (int) $limite
+            );
+            $stmt->execute([$like, $like]);
+        }
+        return $stmt->fetchAll();
     }
 }

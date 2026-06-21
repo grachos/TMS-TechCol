@@ -43,7 +43,9 @@ final class SolicitudRepo
         'destinatario_tipo_id', 'destinatario_num_id',
         'generador_tipo_id', 'generador_num_id',
         'naturaleza_carga', 'tipo_empaque', 'mercancia_codigo',
-        'descripcion_producto', 'cantidad_vehiculos', 'unidad_medida', 'peso', 'valor_mercancia',
+        'descripcion_producto', 'cantidad_vehiculos', 'unidad_medida', 'peso',
+        'valor_mercancia',
+        'codigo_un', 'estado_producto',
         'valor_flete', 'porcentaje_ica',
         'retencion_ica', 'retencion_fuente', 'fopat',
         'tipo_flete', 'tipo_valor_pactado', 'fecha_pago_saldo',
@@ -239,6 +241,8 @@ final class SolicitudRepo
             'horas_pacto_descargue'  => $s['horas_pacto_descargue'] ?? null,
             'minutos_pacto_descargue' => $s['minutos_pacto_descargue'] ?? null,
             'dueno_poliza'           => $s['dueno_poliza'] ?? 'N',
+            'codigo_un'              => $s['codigo_un'] ?? null,
+            'estado_producto'        => $s['estado_producto'] ?? null,
         ];
         $this->insertar($pdo, 'remesa', $remesa);
     }

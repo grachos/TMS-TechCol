@@ -253,6 +253,8 @@ final class ColaRepo
             'fechaCitaPactadaDescargue' => self::fecha($r['fecha_cita_descargue']),
             'horaCitaPactadaDescargueRemesa' => $r['hora_cita_descargue'],
             'codSedePropietario'       => $sedeTercero($r['propietario_tipo_id'], $r['propietario_num_id']),
+            'CODIGOUN'                 => $r['codigo_un'],
+            'ESTADOMERCANCIA'          => $r['estado_producto'],
         ];
         return RndcClient::renderVariables($vars);
     }

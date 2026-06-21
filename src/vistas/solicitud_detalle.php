@@ -136,6 +136,8 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
             'mercancia_codigo'     => 'Cód. mercancía',
             'descripcion_producto' => 'Producto',
             'cantidad_cargada'     => 'Cantidad cargada',
+            'codigo_un'            => 'Código UN',
+            'estado_producto'      => 'Estado del producto',
             'municipio_cargue'     => 'Mun. cargue',
             'municipio_descargue'  => 'Mun. descargue',
             'remitente_num_id'     => 'Remitente',
@@ -148,6 +150,7 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
             'naturaleza_carga'    => $__fmtNatu,
             'tipo_empaque'        => $__fmtEmpaque,
             'mercancia_codigo'    => $__fmtProducto,
+            'estado_producto'     => static fn ($v) => e((['L'=>'Líquido','S'=>'Sólido/semi-sólido','G'=>'Gaseoso'][(string) $v] ?? $v ?: '—')),
             'municipio_cargue'    => $__fmtMuni,
             'municipio_descargue' => $__fmtMuni,
             'remitente_num_id'    => $__fmtTercCol('remitente_tipo_id'),
@@ -156,7 +159,6 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
             'fecha_cita_cargue'   => static fn ($v, $f) => ($__fmtCita)($v, $f, 'hora_cita_cargue'),
             'fecha_cita_descargue' => static fn ($v, $f) => ($__fmtCita)($v, $f, 'hora_cita_descargue'),
         ]); ?>
-    </section>
 
     <section class="tarjeta">
         <h2>Manifiesto <span class="chip chip--rndc"><?= e($manifiesto['estado_rndc'] ?? '—') ?></span></h2>

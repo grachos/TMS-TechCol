@@ -24,6 +24,7 @@ function layout_top(string $titulo, string $activo = ''): void
         'solicitudes'      => 'Solicitudes',
         'terceros'         => 'Terceros',
         'vehiculos'        => 'Vehículos',
+        'productos'        => 'Productos',
         'cola'             => 'Cola RNDC',
         'empresa'          => 'Empresa',
         'solicitud.nueva'  => '+ Nueva solicitud',

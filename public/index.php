@@ -49,6 +49,31 @@ try {
             echo json_encode((new CatalogoRepo())->buscarProductos((string) ($_GET['q'] ?? '')), JSON_UNESCAPED_UNICODE);
             break;
 
+        case 'productos':
+            $cat = new CatalogoRepo();
+            $lista = $cat->listarProductos((string) ($_GET['q'] ?? ''));
+            layout_top('Productos', 'productos');
+            require __DIR__ . '/../src/vistas/productos.php';
+            layout_bottom();
+            break;
+
+        case 'producto.editar':
+            $codigo = (string) ($_GET['codigo'] ?? '');
+            $prod = (new CatalogoRepo())->productoPorCodigo($codigo);
+            if ($prod === null) {
+                header('Location: ' . ruta('productos', ['err' => 'Producto no encontrado.']));
+                break;
+            }
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                (new CatalogoRepo())->actualizarProducto($codigo, $_POST);
+                header('Location: ' . ruta('productos', ['ok' => 'Producto actualizado.']));
+                break;
+            }
+            layout_top('Editar producto', 'productos');
+            require __DIR__ . '/../src/vistas/producto_form.php';
+            layout_bottom();
+            break;
+
         case 'terceros':
             $terceros = (new TerceroRepo())->listar();
             layout_top('Terceros', 'terceros');
