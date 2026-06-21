@@ -302,15 +302,18 @@ final class ColaRepo
             'CODRESPONSABLEPAGODESCARGUE' => $m['responsable_pago_descargue'],
             'TIPOVALORPACTADO'            => $m['tipo_valor_pactado'],
             'MANNROPOLIZA'                => $m['nro_poliza'],
-            'NITMONITOREOFLOTA'           => $m['emf'],
         ];
+        // NITMONITOREOFLOTA: siempre se envía (incluso vacío), required display.
+        $vars['NITMONITOREOFLOTA'] = $m['emf'] ?? '';
 
         // Remesas asociadas al manifiesto (bloque anidado).
         $remesas = '<REMESASMAN procesoid="43"><REMESA>'
             . '<CONSECUTIVOREMESA>' . RndcClient::escaparXml((string) $r['num_remesa']) . '</CONSECUTIVOREMESA>'
             . '</REMESA></REMESASMAN>';
 
-        return RndcClient::renderVariables($vars) . $remesas;
+        $xml = RndcClient::renderVariables($vars);
+        $xml .= '<NITMONITOREOFLOTA>' . RndcClient::escaparXml($m['emf'] ?? '') . '</NITMONITOREOFLOTA>';
+        return $xml . $remesas;
     }
 
     /** Normaliza un número: quita decimales superfluos (3000000.00 → 3000000). */
