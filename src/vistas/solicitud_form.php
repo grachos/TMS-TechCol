@@ -143,7 +143,7 @@ if (!function_exists('acMunicipioP')) {
                 </div>
             </label>
             <label class="ancho-total">Descripción del producto <input type="text" name="descripcion_producto" maxlength="250" value="<?= $v('descripcion_producto') ?>"></label>
-            <label>Cantidad cargada <input type="number" step="0.001" name="cantidad_cargada" value="<?= $v('cantidad_cargada') ?>"></label>
+            <label>Cantidad vehículos <input type="number" step="1" name="cantidad_vehiculos" value="<?= $v('cantidad_vehiculos') ?>"></label>
             <label>Unidad de medida <?= selOpc('unidad_medida', $unidades, $cur('unidad_medida', '1')) ?></label>
             <label>Peso (kg) <input type="number" step="0.001" name="peso" value="<?= $v('peso') ?>"></label>
             <label>Valor de la mercancía <input type="number" step="0.01" name="valor_mercancia" value="<?= $v('valor_mercancia') ?>"></label>

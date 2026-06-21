@@ -251,8 +251,8 @@ try {
                 header('Location: ' . ruta('solicitudes', ['err' => 'Solicitud no encontrada.']));
                 break;
             }
-            if ($datos['solicitud']['estado'] === 'despachada') {
-                header('Location: ' . ruta('solicitud.ver', ['id' => $id, 'err' => 'La solicitud ya fue despachada; no se puede editar.']));
+            if ($datos['solicitud']['estado'] !== 'borrador') {
+                header('Location: ' . ruta('solicitud.ver', ['id' => $id, 'err' => 'La solicitud solo se puede editar en estado borrador.']));
                 break;
             }
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -296,6 +296,10 @@ try {
             }
             if ($datos['solicitud']['estado'] === 'despachada') {
                 header('Location: ' . ruta('solicitud.ver', ['id' => $id, 'err' => 'La solicitud ya fue despachada.']));
+                break;
+            }
+            if (($datos['solicitud']['cantidad_vehiculos'] ?? 1) < 1) {
+                header('Location: ' . ruta('solicitud.ver', ['id' => $id, 'err' => 'Ya no quedan vehículos por despachar en esta solicitud.']));
                 break;
             }
             $solicitud = $datos['solicitud'];

@@ -42,7 +42,7 @@ final class SolicitudRepo
         'destinatario_tipo_id', 'destinatario_num_id',
         'generador_tipo_id', 'generador_num_id',
         'naturaleza_carga', 'tipo_empaque', 'mercancia_codigo',
-        'descripcion_producto', 'cantidad_cargada', 'unidad_medida', 'peso', 'valor_mercancia',
+        'descripcion_producto', 'cantidad_vehiculos', 'unidad_medida', 'peso', 'valor_mercancia',
         'valor_flete', 'porcentaje_ica',
         'retencion_ica', 'retencion_fuente', 'fopat',
         'tipo_flete', 'tipo_valor_pactado', 'fecha_pago_saldo',
@@ -139,8 +139,6 @@ final class SolicitudRepo
             $pdo->prepare("UPDATE solicitud_servicio SET $sets WHERE id = :id")->execute($params);
 
             // Pre-despacho: se regeneran remesa y manifiesto desde la solicitud.
-            $pdo->prepare('DELETE FROM remesa WHERE solicitud_id = ?')->execute([$id]);
-            $pdo->prepare('DELETE FROM manifiesto WHERE solicitud_id = ?')->execute([$id]);
             $this->sembrarRemesa($pdo, $id, $fila);
             $this->sembrarManifiesto($pdo, $id, $fila);
 
@@ -170,19 +168,26 @@ final class SolicitudRepo
                 $valor = $datos[$c] ?? null;
                 $fila[$c] = ($valor === '' ? null : $valor);
             }
-            $fila['estado'] = 'procesada';
+
+            // Decrementar vehículos restantes, marcar despachada si llega a 0.
+            $stmt = $pdo->prepare('SELECT cantidad_vehiculos FROM solicitud_servicio WHERE id = ?');
+            $stmt->execute([$id]);
+            $restantes = (int) ($stmt->fetchColumn() ?: 1);
+            $nuevosRestantes = max(0, $restantes - 1);
+            $fila['cantidad_vehiculos'] = $nuevosRestantes;
+            $fila['estado'] = $nuevosRestantes > 0 ? 'procesada' : 'despachada';
+
             $sets = implode(', ', array_map(static fn ($c) => "$c = :$c", array_keys($fila)));
             $fila['id'] = $id;
             $pdo->prepare("UPDATE solicitud_servicio SET $sets WHERE id = :id")->execute($fila);
 
-            // 2) Re-sembrar remesa + manifiesto desde la solicitud ya completa.
+            // 2) Leer solicitud completa y sembrar nueva remesa + manifiesto.
             $stmt = $pdo->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
             $stmt->execute([$id]);
             $s = $stmt->fetch();
             $s['valor_anticipo'] = $datos['valor_anticipo'] ?? null;
+            $s['cantidad_vehiculos'] = $nuevosRestantes;
 
-            $pdo->prepare('DELETE FROM remesa WHERE solicitud_id = ?')->execute([$id]);
-            $pdo->prepare('DELETE FROM manifiesto WHERE solicitud_id = ?')->execute([$id]);
             $this->sembrarRemesa($pdo, $id, $s);
             $this->sembrarManifiesto($pdo, $id, $s);
 
@@ -211,7 +216,7 @@ final class SolicitudRepo
             'tipo_empaque'         => $s['tipo_empaque'] ?? null,
             'mercancia_codigo'     => $s['mercancia_codigo'] ?? null,
             'descripcion_producto' => $s['descripcion_producto'] ?? null,
-            'cantidad_cargada'     => $s['cantidad_cargada'] ?? null,
+            'cantidad_cargada'     => $s['cantidad_vehiculos'] ?? 1,
             'unidad_medida'        => $s['unidad_medida'] ?? null,
             'peso'                 => $s['peso'] ?? null,
             'remitente_tipo_id'    => $s['remitente_tipo_id'] ?? null,

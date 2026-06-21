@@ -42,6 +42,8 @@ $acVehiculo = static function (string $name, string $val): string {
 <p class="ayuda">Al confirmar se completan el manifiesto y la remesa, y se <strong>encolan</strong>
    para enviarse al RNDC (tercero → vehículo → remesa → manifiesto).</p>
 
+<p class="ayuda"><strong>Vehículos restantes:</strong> <?= (int) ($s['cantidad_vehiculos'] ?? 1) ?></p>
+
 <?php flash(); ?>
 
 <form method="post" action="<?= e(ruta('despacho.guardar', ['id' => (int) $s['id']])) ?>" class="form">
