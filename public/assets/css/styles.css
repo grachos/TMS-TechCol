@@ -265,3 +265,8 @@ code {
 .prod-tipo-00   { background: #27ae60; }
 .prod-peligrosa { color: #c0392b; font-weight: 700; font-size: 12px; }
 .prod-detalle   { color: #5a6b7e; }
+.campo-lectura  { display: block; padding: 8px 10px; background: #f4f6f8; border: 1px solid #d0d6de; border-radius: 4px; color: #1a2b3c; font-size: 14px; min-height: 18px; }
+.muni-label     { font-weight: 600; color: #1a5b8c; }
+.filtros        { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; padding: 12px 16px; background: #fff; border: 1px solid var(--gris-borde); border-radius: 6px; }
+.filtros label  { font-size: 13px; font-weight: 600; color: var(--texto); display: flex; flex-direction: column; gap: 3px; }
+.filtros input  { padding: 6px 8px; border: 1px solid var(--gris-borde); border-radius: 4px; font-size: 13px; }

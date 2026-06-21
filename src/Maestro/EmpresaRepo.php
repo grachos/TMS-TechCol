@@ -13,59 +13,70 @@ final class EmpresaRepo
     public function obtener(): array
     {
         $fila = db()->query('SELECT * FROM maestro_empresa WHERE id = 1')->fetch();
-        return $fila ?: ['id' => 1, 'tipo_id' => 'N', 'nit' => '', 'razon_social' => '', 'nro_poliza' => '', 'consecutivo_remesa' => 0, 'consecutivo_manifiesto' => 0, 'radicado_remesa' => 0];
+        return $fila ?: ['id' => 1, 'tipo_id' => 'N', 'nit' => '', 'razon_social' => '', 'nro_poliza' => '', 'consecutivo_remesa' => 'REM-00000', 'consecutivo_manifiesto' => 'MAN-00000'];
     }
 
     /** @param array<string,mixed> $datos */
     public function guardar(array $datos): void
     {
         db()->prepare(
-            'INSERT INTO maestro_empresa (id, tipo_id, nit, razon_social, nro_poliza, consecutivo_remesa, consecutivo_manifiesto, radicado_remesa)
-             VALUES (1, :tipo_id, :nit, :razon_social, :nro_poliza, :consecutivo_remesa, :consecutivo_manifiesto, :radicado_remesa)
+            'INSERT INTO maestro_empresa (id, tipo_id, nit, razon_social, nro_poliza, consecutivo_remesa, consecutivo_manifiesto)
+             VALUES (1, :tipo_id, :nit, :razon_social, :nro_poliza, :consecutivo_remesa, :consecutivo_manifiesto)
              ON DUPLICATE KEY UPDATE
                 tipo_id = VALUES(tipo_id), nit = VALUES(nit),
                 razon_social = VALUES(razon_social), nro_poliza = VALUES(nro_poliza),
                 consecutivo_remesa = VALUES(consecutivo_remesa),
-                consecutivo_manifiesto = VALUES(consecutivo_manifiesto),
-                radicado_remesa = VALUES(radicado_remesa)'
+                consecutivo_manifiesto = VALUES(consecutivo_manifiesto)'
         )->execute([
             'tipo_id'              => $datos['tipo_id'] ?? 'N',
             'nit'                  => trim((string) ($datos['nit'] ?? '')),
             'razon_social'         => trim((string) ($datos['razon_social'] ?? '')) ?: null,
             'nro_poliza'           => trim((string) ($datos['nro_poliza'] ?? '')) ?: null,
-            'consecutivo_remesa'   => (int) ($datos['consecutivo_remesa'] ?? 0),
-            'consecutivo_manifiesto' => (int) ($datos['consecutivo_manifiesto'] ?? 0),
-            'radicado_remesa'      => (int) ($datos['radicado_remesa'] ?? 0),
+            'consecutivo_remesa'   => trim((string) ($datos['consecutivo_remesa'] ?? 'REM-00000')),
+            'consecutivo_manifiesto' => trim((string) ($datos['consecutivo_manifiesto'] ?? 'MAN-00000')),
         ]);
     }
 
-    /** Genera y reserva el siguiente consecutivo de remesa. */
+    /** Extrae el número desde un consecutivo en formato PREF-00000. */
+    private static function extraerNum(string $val): int
+    {
+        $parts = explode('-', $val, 2);
+        return (int) ($parts[1] ?? $parts[0]);
+    }
+
+    /** Genera y reserva el siguiente consecutivo de remesa (formato REM-00001). */
     public function siguienteRemesa(): string
     {
         $emp = $this->obtener();
-        $next = ((int) ($emp['consecutivo_remesa'] ?? 0)) + 1;
+        $num = self::extraerNum((string) ($emp['consecutivo_remesa'] ?? '0'));
+        $next = $num + 1;
+        $fmt = 'REM-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
         db()->prepare('UPDATE maestro_empresa SET consecutivo_remesa = ? WHERE id = 1 AND consecutivo_remesa = ?')
-            ->execute([$next, $emp['consecutivo_remesa'] ?? 0]);
-        return 'REM-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+            ->execute([$fmt, $emp['consecutivo_remesa'] ?? '']);
+        return $fmt;
     }
 
-    /** Genera y reserva el siguiente consecutivo de manifiesto. */
+    /** Genera y reserva el siguiente consecutivo de manifiesto (formato MAN-00001). */
     public function siguienteManifiesto(): string
     {
         $emp = $this->obtener();
-        $next = ((int) ($emp['consecutivo_manifiesto'] ?? 0)) + 1;
+        $num = self::extraerNum((string) ($emp['consecutivo_manifiesto'] ?? '0'));
+        $next = $num + 1;
+        $fmt = 'MAN-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
         db()->prepare('UPDATE maestro_empresa SET consecutivo_manifiesto = ? WHERE id = 1 AND consecutivo_manifiesto = ?')
-            ->execute([$next, $emp['consecutivo_manifiesto'] ?? 0]);
-        return 'MAN-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+            ->execute([$fmt, $emp['consecutivo_manifiesto'] ?? '']);
+        return $fmt;
     }
 
-    /** Genera y reserva el siguiente radicado de remesa. */
-    public function siguienteRadicadoRemesa(): int
+    /** Retorna el valor actual de consecutivo_remesa como entero (para el XML). */
+    public function siguienteConsecutivoRemesa(): string
     {
         $emp = $this->obtener();
-        $next = ((int) ($emp['radicado_remesa'] ?? 0)) + 1;
-        db()->prepare('UPDATE maestro_empresa SET radicado_remesa = ? WHERE id = 1 AND radicado_remesa = ?')
-            ->execute([$next, $emp['radicado_remesa'] ?? 0]);
-        return $next;
+        $num = self::extraerNum((string) ($emp['consecutivo_remesa'] ?? '0'));
+        $next = $num + 1;
+        $fmt = str_pad((string) $next, 10, '0', STR_PAD_LEFT);
+        db()->prepare('UPDATE maestro_empresa SET consecutivo_remesa = ? WHERE id = 1 AND consecutivo_remesa = ?')
+            ->execute(['REM-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT), $emp['consecutivo_remesa'] ?? '']);
+        return $fmt;
     }
 }

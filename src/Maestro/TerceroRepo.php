@@ -40,7 +40,7 @@ final class TerceroRepo
     /**
      * Busca terceros para autocompletado.
      *
-     * @return list<array{id:int,tipo_id:string,num_id:string,nombre:string,label:string}>
+     * @return list<array{id:int,tipo_id:string,num_id:string,nombre:string,municipio_nombre:string,cod_municipio:string,label:string}>
      */
     public function buscar(string $q, bool $soloConductor = false, int $limite = 15): array
     {
@@ -49,7 +49,7 @@ final class TerceroRepo
             return [];
         }
         $like = '%' . $q . '%';
-        $sql  = 'SELECT id, tipo_id, num_id, nombre FROM tercero WHERE (nombre LIKE ? OR num_id LIKE ?)';
+        $sql  = 'SELECT id, tipo_id, num_id, nombre, municipio_nombre, cod_municipio FROM tercero WHERE (nombre LIKE ? OR num_id LIKE ?)';
         if ($soloConductor) {
             $sql .= ' AND es_conductor = 1';
         }
@@ -61,6 +61,17 @@ final class TerceroRepo
             $f['label'] = $f['nombre'] . ' (' . $f['tipo_id'] . ' ' . $f['num_id'] . ')';
         }
         return $filas;
+    }
+
+    /**
+     * Busca un tercero por tipo_id + num_id.
+     * @return array<string,mixed>|null
+     */
+    public function obtenerPorTipoNum(string $tipo, string $num): ?array
+    {
+        $stmt = db()->prepare('SELECT * FROM tercero WHERE tipo_id = ? AND num_id = ?');
+        $stmt->execute([$tipo, $num]);
+        return $stmt->fetch() ?: null;
     }
 
     /**

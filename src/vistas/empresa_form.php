@@ -34,16 +34,12 @@ $tiposId = ['N' => 'N - NIT', 'C' => 'C - Cédula'];
                 <input type="text" name="nro_poliza" maxlength="20" value="<?= e((string) ($empresa['nro_poliza'] ?? '')) ?>">
             </label>
             <label>Últ. consecutivo remesa
-                <input type="number" name="consecutivo_remesa" min="0" value="<?= (int) ($empresa['consecutivo_remesa'] ?? 0) ?>">
-                <small>Se auto-incrementa al crear solicitud</small>
+                <input type="text" name="consecutivo_remesa" value="<?= e((string) ($empresa['consecutivo_remesa'] ?? 'REM-00000')) ?>">
+                <small>Se auto-incrementa al confirmar despacho</small>
             </label>
             <label>Últ. consecutivo manifiesto
-                <input type="number" name="consecutivo_manifiesto" min="0" value="<?= (int) ($empresa['consecutivo_manifiesto'] ?? 0) ?>">
-                <small>Se auto-incrementa al crear solicitud</small>
-            </label>
-            <label>Últ. radicado remesa
-                <input type="number" name="radicado_remesa" min="0" value="<?= (int) ($empresa['radicado_remesa'] ?? 0) ?>">
-                <small>Se auto-incrementa al generar XML de remesa</small>
+                <input type="text" name="consecutivo_manifiesto" value="<?= e((string) ($empresa['consecutivo_manifiesto'] ?? 'MAN-00000')) ?>">
+                <small>Se auto-incrementa al confirmar despacho</small>
             </label>
         </div>
     </fieldset>

@@ -43,13 +43,14 @@ if (!function_exists('selOpc')) {
 }
 if (!function_exists('acTerceroP')) {
     /** Picker de tercero con precarga (tipo/num + texto visible). */
-    function acTerceroP(array $s, string $tipoName, string $numName, string $ph = 'Buscar tercero…', string $params = ''): string
+    function acTerceroP(array $s, string $tipoName, string $numName, string $ph = 'Buscar tercero…', string $params = '', string $muniTarget = ''): string
     {
         $tipo = (string) ($s[$tipoName] ?? '');
         $num  = (string) ($s[$numName] ?? '');
         $txt  = $num !== '' ? trim($tipo . ' ' . $num) : '';
         $p    = $params !== '' ? ' data-ac-params="' . e($params) . '"' : '';
-        return '<div class="autocompletar" data-ac="terceros"' . $p . '>'
+        $mt   = $muniTarget !== '' ? ' data-muni-target="' . e($muniTarget) . '"' : '';
+        return '<div class="autocompletar" data-ac="terceros"' . $p . $mt . '>'
             . '<input type="text" class="ac-texto" autocomplete="off" placeholder="' . e($ph) . '" value="' . e($txt) . '">'
             . '<ul class="ac-lista"></ul>'
             . '<input type="hidden" name="' . e($tipoName) . '" data-ac-field="tipo_id" value="' . e($tipo) . '">'
@@ -82,7 +83,7 @@ if (!function_exists('acMunicipioP')) {
     <fieldset>
         <legend>1. Generales</legend>
         <div class="grid">
-            <label>Consecutivo <input type="text" name="consecutivo" maxlength="30" placeholder="SS-0001" value="<?= $v('consecutivo') ?>"></label>
+            <label>Consecutivo <input type="text" name="consecutivo" readonly value="<?= $v('consecutivo') ?: '(auto)' ?>"><small>Se genera automáticamente</small></label>
             <label>Fecha <input type="date" name="fecha_solicitud" value="<?= $editar ? $v('fecha_solicitud') : e(date('Y-m-d')) ?>"></label>
             <label>Operación de transporte <?= selOpc('operacion_transporte', $operaciones, $cur('operacion_transporte', 'G')) ?></label>
             <label>Tipo de viaje <?= selOpc('tipo_viaje', ['NACIONAL' => 'Nacional', 'URBANO' => 'Urbano'], $cur('tipo_viaje', 'NACIONAL'), false) ?></label>
@@ -91,22 +92,19 @@ if (!function_exists('acMunicipioP')) {
     </fieldset>
 
     <fieldset>
-        <legend>2. Partes</legend>
+        <legend>2. Partes / Ruta</legend>
         <div class="grid">
-            <label class="ancho-total">Remitente <?= acTerceroP($s, 'remitente_tipo_id', 'remitente_num_id') ?></label>
-            <label class="ancho-total">Destinatario <?= acTerceroP($s, 'destinatario_tipo_id', 'destinatario_num_id') ?></label>
-            <label class="ancho-total">Titular del manifiesto <?= acTerceroP($s, 'titular_tipo_id', 'titular_num_id') ?></label>
-        </div>
-        <p class="ayuda">¿Falta alguien? Créalo en <a href="<?= e(ruta('terceros')) ?>" target="_blank">Terceros</a>.</p>
-    </fieldset>
-
-    <fieldset>
-        <legend>3. Ruta</legend>
-        <div class="grid">
-            <label class="ancho-total">Municipio origen <?= acMunicipioP($s, $muni, 'municipio_origen') ?></label>
-            <label class="ancho-total">Municipio destino <?= acMunicipioP($s, $muni, 'municipio_destino') ?></label>
+            <label class="ancho-total">Remitente <?= acTerceroP($s, 'remitente_tipo_id', 'remitente_num_id', 'Buscar remitente…', '', 'muni_remitente') ?>
+                <small>Municipio: <span id="muni_remitente" class="muni-label"><?= $v('municipio_nombre_origen') ?: '(seleccione remitente)' ?></span></small>
+            </label>
+            <label class="ancho-total">Destinatario <?= acTerceroP($s, 'destinatario_tipo_id', 'destinatario_num_id', 'Buscar destinatario…', '', 'muni_destinatario') ?>
+                <small>Municipio: <span id="muni_destinatario" class="muni-label"><?= $v('municipio_nombre_destino') ?: '(seleccione destinatario)' ?></span></small>
+            </label>
+            <label class="ancho-total">Generador de carga <?= acTerceroP($s, 'generador_tipo_id', 'generador_num_id') ?></label>
+            <label>¿Dueño póliza? <?= selOpc('dueno_poliza', ['N' => 'No', 'S' => 'Sí'], $cur('dueno_poliza', 'N'), false) ?></label>
             <label class="ancho-total">Municipio pago del saldo <?= acMunicipioP($s, $muni, 'municipio_pago_saldo') ?></label>
         </div>
+        <p class="ayuda">Origen y destino se heredan del municipio del remitente/destinatario. ¿Falta alguien? Créalo en <a href="<?= e(ruta('terceros')) ?>" target="_blank">Terceros</a>.</p>
     </fieldset>
 
     <fieldset>
@@ -156,7 +154,6 @@ if (!function_exists('acMunicipioP')) {
         <legend>5. Valores y manifiesto</legend>
         <div class="grid">
             <label>Valor del flete <input type="number" step="0.01" name="valor_flete" id="valor_flete" value="<?= $v('valor_flete') ?>"></label>
-            <label>Valor del anticipo <input type="number" step="0.01" name="valor_anticipo" value="<?= $v('valor_anticipo') ?>"></label>
             <label>Tarifa ICA (por mil) <input type="number" step="0.01" name="porcentaje_ica" id="porcentaje_ica" value="<?= $v('porcentaje_ica') ?>"></label>
             <label>Retención ICA <input type="number" step="0.01" name="retencion_ica" id="retencion_ica" readonly value="<?= $v('retencion_ica') ?>"></label>
             <label>Retención en la fuente (1%) <input type="number" step="0.01" name="retencion_fuente" id="retencion_fuente" readonly value="<?= $v('retencion_fuente') ?>"></label>

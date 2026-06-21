@@ -14,6 +14,7 @@ $val    = static fn (string $c): string => e((string) ($GLOBALS['vh'][$c] ?? '')
 
 $tenedorTxt = $editar && !empty($vh['tenedor_num_id']) ? trim(($vh['tenedor_tipo_id'] ?? '') . ' ' . $vh['tenedor_num_id']) : '';
 $propTxt    = $editar && !empty($vh['propietario_num_id']) ? trim(($vh['propietario_tipo_id'] ?? '') . ' ' . $vh['propietario_num_id']) : '';
+$condTxt    = $editar && !empty($vh['conductor_num_id']) ? trim(($vh['conductor_tipo_id'] ?? '') . ' ' . $vh['conductor_num_id']) : '';
 $configs    = (new CatalogoRepo())->configuraciones();
 $cfgActual  = (string) ($vh['cod_configuracion'] ?? '');
 ?>
@@ -72,6 +73,19 @@ $cfgActual  = (string) ($vh['cod_configuracion'] ?? '');
                 <input type="hidden" name="propietario_num_id" data-ac-field="num_id" value="<?= $val('propietario_num_id') ?>">
             </div>
         </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Conductor por defecto (opcional)</legend>
+        <label class="ancho-total">Buscar tercero (conductor)
+            <div class="autocompletar" data-ac="terceros" data-ac-params="solo_conductor=1">
+                <input type="text" class="ac-texto" autocomplete="off" placeholder="Nombre o identificación…" value="<?= e($condTxt) ?>">
+                <ul class="ac-lista"></ul>
+                <input type="hidden" name="conductor_tipo_id" data-ac-field="tipo_id" value="<?= $val('conductor_tipo_id') ?>">
+                <input type="hidden" name="conductor_num_id" data-ac-field="num_id" value="<?= $val('conductor_num_id') ?>">
+            </div>
+        </label>
+        <p class="ayuda">Se usará como conductor predeterminado al despachar con este vehículo.</p>
     </fieldset>
 
     <div class="acciones">

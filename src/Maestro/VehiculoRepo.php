@@ -16,6 +16,7 @@ final class VehiculoRepo
     private const CAMPOS = [
         'placa', 'cod_configuracion', 'peso_vacio', 'remolque_placa',
         'propietario_tipo_id', 'propietario_num_id', 'tenedor_tipo_id', 'tenedor_num_id',
+        'conductor_tipo_id', 'conductor_num_id',
     ];
 
     /**
@@ -93,6 +94,30 @@ final class VehiculoRepo
             'SELECT id, placa, cod_configuracion, remolque_placa, tenedor_num_id, estado_rndc, rndc_ingreso_id
              FROM vehiculo ORDER BY id DESC LIMIT ' . (int) $limite
         )->fetchAll();
+    }
+
+    /**
+     * Devuelve datos del vehículo más el conductor (con nombre completo)
+     * y el tenedor (para autocompletado en el despacho).
+     *
+     * @return array<string,mixed>|null
+     */
+    public function detalle(string $placa): ?array
+    {
+        $stmt = db()->prepare(
+            'SELECT v.placa,
+                    v.conductor_tipo_id, v.conductor_num_id,
+                    CONCAT_WS(\' \', c.nombre, c.primer_apellido, c.segundo_apellido) AS conductor_nombre_completo,
+                    v.tenedor_tipo_id,
+                    v.tenedor_num_id,
+                    CONCAT_WS(\' \', t.nombre, t.primer_apellido, t.segundo_apellido) AS tenedor_nombre_completo
+             FROM vehiculo v
+             LEFT JOIN tercero c ON c.tipo_id = v.conductor_tipo_id AND c.num_id = v.conductor_num_id
+             LEFT JOIN tercero t ON t.tipo_id = v.tenedor_tipo_id AND t.num_id = v.tenedor_num_id
+             WHERE v.placa = ?'
+        );
+        $stmt->execute([strtoupper($placa)]);
+        return $stmt->fetch() ?: null;
     }
 
     /** @return array<string,mixed>|null */

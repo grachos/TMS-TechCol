@@ -3,6 +3,13 @@
 (function () {
     'use strict';
 
+    function escHtml(s) {
+        if (typeof s !== 'string') return '';
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(s));
+        return d.innerHTML;
+    }
+
     /* ---------- Autocompletado genérico (municipios, terceros, vehículos) ----------
        Uso en HTML:
          <div class="autocompletar" data-ac="terceros" data-ac-params="solo_conductor=1">
@@ -50,7 +57,11 @@
                 lista.innerHTML = '';
                 items.forEach(function (it) {
                     const li = document.createElement('li');
-                    li.textContent = it.label;
+                    if (it.nombre_mpio && it.nombre !== it.nombre_mpio) {
+                        li.innerHTML = '<strong>' + escHtml(it.nombre) + '</strong><br><small>' + escHtml(it.nombre_mpio) + ', ' + escHtml(it.departamento) + '</small>';
+                    } else {
+                        li.textContent = it.label;
+                    }
                     li.addEventListener('mousedown', function (e) {
                         e.preventDefault();
                         texto.value = it.label;
@@ -182,9 +193,48 @@
         calc();
     }
 
+    /* ---------- Autocompletar conductor + propietario desde vehículo (despacho) ---------- */
+    function initVehiculoConductor() {
+        const caja = document.querySelector('[data-ac="vehiculos"].autocompletar');
+        if (!caja) { return; }
+        caja.addEventListener('ac:select', function (e) {
+            const placa = e.detail.placa || '';
+            if (!placa) { return; }
+            fetch('?r=vehiculo.detalle&placa=' + encodeURIComponent(placa))
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d || !d.placa) { return; }
+                    var cTipo = document.getElementById('conductor_tipo_id');
+                    var cNum  = document.getElementById('conductor_num_id');
+                    var cLbl  = document.getElementById('conductor_label');
+                    if (cTipo) { cTipo.value = d.conductor_tipo_id || ''; }
+                    if (cNum)  { cNum.value  = d.conductor_num_id  || ''; }
+                    if (cLbl)  { cLbl.textContent = d.conductor_nombre_completo || (d.conductor_tipo_id ? d.conductor_tipo_id + ' ' + d.conductor_num_id : '(no asignado)'); }
+
+                    var tLbl = document.getElementById('tenedor_label');
+                    if (tLbl) { tLbl.textContent = d.tenedor_nombre_completo || (d.tenedor_tipo_id ? d.tenedor_tipo_id + ' ' + d.tenedor_num_id : '(no asignado)'); }
+                });
+        });
+    }
+
+    /* ---------- Mostrar municipio al seleccionar remitente/destinatario ---------- */
+    function initMuniLabels() {
+        document.querySelectorAll('[data-muni-target]').forEach(function (caja) {
+            caja.addEventListener('ac:select', function (e) {
+                var idSpan = caja.getAttribute('data-muni-target');
+                var span = document.getElementById(idSpan);
+                if (span) {
+                    span.textContent = e.detail.municipio_nombre || (e.detail.cod_municipio || '');
+                }
+            });
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         initAutocomplete();
         initMapa();
         initCalculos();
+        initVehiculoConductor();
+        initMuniLabels();
     });
 })();

@@ -38,6 +38,12 @@ try {
             echo json_encode((new VehiculoRepo())->buscar((string) ($_GET['q'] ?? '')), JSON_UNESCAPED_UNICODE);
             break;
 
+        case 'vehiculo.detalle':
+            header('Content-Type: application/json; charset=utf-8');
+            $det = (new VehiculoRepo())->detalle((string) ($_GET['placa'] ?? ''));
+            echo json_encode($det ?? new stdClass(), JSON_UNESCAPED_UNICODE);
+            break;
+
         case 'productos.buscar':
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode((new CatalogoRepo())->buscarProductos((string) ($_GET['q'] ?? '')), JSON_UNESCAPED_UNICODE);
@@ -188,7 +194,9 @@ try {
             break;
         case 'solicitudes':
             $repo = new SolicitudRepo();
-            $solicitudes = $repo->listar();
+            $desde = !empty($_GET['desde']) ? $_GET['desde'] : null;
+            $hasta = !empty($_GET['hasta']) ? $_GET['hasta'] : null;
+            $solicitudes = $repo->listar(100, $desde, $hasta);
             layout_top('Solicitudes', 'solicitudes');
             require __DIR__ . '/../src/vistas/solicitudes.php';
             layout_bottom();
@@ -347,18 +355,16 @@ try {
                 echo 'No encontrado.';
                 break;
             }
+            try {
+                $rndc = RndcClient::desdeConfig();
+                echo "=== PREVISUALIZACIÓN XML ===\n\n";
+                echo $rndc->previewXmlInterno((int) $f['proceso_rndc'], (string) $f['payload_xml']);
+            } catch (Throwable) {
+                echo "(Fragmento <variables>):\n" . $f['payload_xml'];
+            }
             if ($f['respuesta_rndc'] !== null && $f['respuesta_rndc'] !== '') {
-                echo "=== XML ENVIADO (reconstruido) ===\n\n";
-                try {
-                    $rndc = RndcClient::desdeConfig();
-                    echo $rndc->previewXmlInterno((int) $f['proceso_rndc'], (string) $f['payload_xml']);
-                } catch (Throwable) {
-                    echo "(Fragmento <variables>):\n" . $f['payload_xml'];
-                }
                 echo "\n\n=== RESPUESTA DEL RNDC ===\n\n";
                 echo $f['respuesta_rndc'];
-            } else {
-                echo "Sin previsualización. Procesa la cola (en modo seguro genera el XML).\n\nFragmento <variables>:\n" . $f['payload_xml'];
             }
             break;
 

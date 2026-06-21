@@ -30,10 +30,6 @@ CREATE TABLE IF NOT EXISTS solicitud_servicio (
     municipio_origen     VARCHAR(8)   NULL  COMMENT '[CODMUNICIPIOORIGEN] DIVIPOLA',
     municipio_destino    VARCHAR(8)   NULL  COMMENT '[CODMUNICIPIODESTINO] DIVIPOLA',
 
-    -- Empresa transportadora (titular)
-    empresa_tipo_id      VARCHAR(2)   NULL  COMMENT '[CODTIPOIDTITULARMANIFIESTO]',
-    empresa_num_id       VARCHAR(20)  NULL  COMMENT '[CODIDTITULARMANIFIESTO] NIT',
-
     -- Vehículo y conductor
     placa_vehiculo       VARCHAR(10)  NULL  COMMENT '[NUMPLACA]',
     conductor_tipo_id    VARCHAR(2)   NULL  COMMENT '[CODTIPOIDCONDUCTOR]',
@@ -120,6 +116,7 @@ CREATE TABLE IF NOT EXISTS remesa (
     descripcion_producto   VARCHAR(250) NULL COMMENT '[DESCRIPCIONCORTAPRODUCTO]',
     cantidad_cargada       DECIMAL(14,3) NULL COMMENT '[CANTIDADCARGADA]',
     unidad_medida          VARCHAR(2)   NULL COMMENT '[CODUNIDADMEDIDACAPACIDAD]',
+    peso                   DECIMAL(14,3) NULL COMMENT '[PESOREMESA]',
 
     remitente_tipo_id      VARCHAR(2)   NULL COMMENT '[CODTIPOIDREMITENTE]',
     remitente_num_id       VARCHAR(20)  NULL COMMENT '[NUMIDREMITENTE]',

@@ -7,9 +7,9 @@
  */
 declare(strict_types=1);
 
-/** Imprime una tabla clave/valor a partir de un arreglo de campos. */
+/** Imprime una tabla clave/valor con formateo opcional. */
 if (!function_exists('fichaCampos')) {
-    function fichaCampos(?array $fila, array $campos): void
+    function fichaCampos(?array $fila, array $campos, array $format = []): void
     {
         if ($fila === null) {
             echo '<p class="ayuda">No generado.</p>';
@@ -18,11 +18,78 @@ if (!function_exists('fichaCampos')) {
         echo '<dl class="ficha">';
         foreach ($campos as $col => $etq) {
             $val = $fila[$col] ?? null;
-            echo '<dt>' . e($etq) . '</dt><dd>' . ($val === null || $val === '' ? '—' : e((string) $val)) . '</dd>';
+            if (isset($format[$col])) {
+                $mostrar = $format[$col]($val, $fila);
+            } else {
+                $mostrar = $val === null || $val === '' ? '—' : e((string) $val);
+            }
+            echo '<dt>' . e($etq) . '</dt><dd>' . $mostrar . '</dd>';
         }
         echo '</dl>';
     }
 }
+
+$__muni = new MunicipioRepo();
+$__terc = new TerceroRepo();
+
+$__fmtMuni = static function (?string $cod) use ($__muni): string {
+    if (!$cod) { return '—'; }
+    $nom = $__muni->nombre($cod);
+    return e($cod . ($nom ? ' - ' . $nom : ''));
+};
+
+$__fmtTerc = static function (?string $num, ?array $fila, string $tipoCol) use ($__terc): string {
+    if (!$num) { return '—'; }
+    $tipo = $fila[$tipoCol] ?? null;
+    if (!$tipo) { return e($num); }
+    $t = $__terc->obtenerPorTipoNum($tipo, $num);
+    $base = $tipo . ' ' . $num;
+    if ($t) {
+        $nom = $t['nombre'] ?? '';
+        $ape1 = $t['primer_apellido'] ?? '';
+        $ape2 = $t['segundo_apellido'] ?? '';
+        $nomCompleto = trim($nom . ' ' . $ape1 . ' ' . $ape2) ?: $t['nombre_completo'] ?? '';
+        return e($base . ' - ' . $nomCompleto);
+    }
+    return e($base);
+};
+
+$__fmtTercCol = function (string $tipoCol) use ($__fmtTerc): callable {
+    return static function ($v, $f) use ($__fmtTerc, $tipoCol): string {
+        return ($__fmtTerc)($v, $f, $tipoCol);
+    };
+};
+
+$__fmtCita = static function (?string $fecha, ?array $fila, string $horaCol): string {
+    if (!$fecha) { return '—'; }
+    $hora = $fila[$horaCol] ?? null;
+    return e($fecha . ($hora ? ' ' . substr($hora, 0, 5) : ''));
+};
+
+$__operaciones = ['G' => 'General', 'P' => 'Paqueteo', 'C' => 'Contenedor Cargado', 'V' => 'Contenedor Vacío'];
+
+$__naturalezas = [
+    '1' => 'Carga normal', '2' => 'Carga peligrosa', '3' => 'Carga extradimensionada',
+    '4' => 'Carga extrapesada', '5' => 'Desechos peligrosos', '6' => 'Semovientes', '7' => 'Refrigerada',
+];
+
+$__cat = new CatalogoRepo();
+
+$__fmtOp = static fn (?string $v) => e($v ? ($__operaciones[$v] ?? $v) : '—');
+
+$__fmtNatu = static fn (?string $v) => e($v ? ($__naturalezas[$v] ?? $v) : '—');
+
+$__fmtEmpaque = static function (?string $v) use ($__cat): string {
+    if (!$v) { return '—'; }
+    $desc = $__cat->empaquePorCodigo($v);
+    return e($v . ($desc ? ' - ' . $desc : ''));
+};
+
+$__fmtProducto = static function (?string $v) use ($__cat): string {
+    if (!$v) { return '—'; }
+    $p = $__cat->productoPorCodigo($v);
+    return e($v . ($p ? ' - ' . ($p['nombre'] ?? '') : ''));
+};
 ?>
 <div class="cabecera-lista">
     <h1>Solicitud #<?= (int) $solicitud['id'] ?>
@@ -41,16 +108,21 @@ if (!function_exists('fichaCampos')) {
         'operacion_transporte' => 'Operación',
         'municipio_origen'     => 'Municipio origen',
         'municipio_destino'    => 'Municipio destino',
-        'empresa_num_id'       => 'NIT empresa',
-        'placa_vehiculo'       => 'Placa',
-        'conductor_num_id'     => 'Conductor',
         'remitente_num_id'     => 'Remitente',
         'destinatario_num_id'  => 'Destinatario',
+        'generador_num_id'     => 'Generador de carga',
         'descripcion_producto' => 'Producto',
         'cantidad_cargada'     => 'Cantidad',
+        'peso'                 => 'Peso (kg)',
         'valor_flete'          => 'Flete',
-        'valor_anticipo'       => 'Anticipo',
         'observaciones'        => 'Observaciones',
+    ], [
+        'operacion_transporte' => $__fmtOp,
+        'municipio_origen'  => $__fmtMuni,
+        'municipio_destino' => $__fmtMuni,
+        'remitente_num_id'  => $__fmtTercCol('remitente_tipo_id'),
+        'destinatario_num_id' => $__fmtTercCol('destinatario_tipo_id'),
+        'generador_num_id'  => $__fmtTercCol('generador_tipo_id'),
     ]); ?>
 </section>
 
@@ -70,7 +142,19 @@ if (!function_exists('fichaCampos')) {
             'destinatario_num_id'  => 'Destinatario',
             'propietario_num_id'   => 'Propietario carga',
             'fecha_cita_cargue'    => 'Cita cargue',
+            'fecha_cita_descargue' => 'Cita descargue',
             'rndc_ingreso_id'      => 'Ingreso RNDC',
+        ], [
+            'naturaleza_carga'    => $__fmtNatu,
+            'tipo_empaque'        => $__fmtEmpaque,
+            'mercancia_codigo'    => $__fmtProducto,
+            'municipio_cargue'    => $__fmtMuni,
+            'municipio_descargue' => $__fmtMuni,
+            'remitente_num_id'    => $__fmtTercCol('remitente_tipo_id'),
+            'destinatario_num_id' => $__fmtTercCol('destinatario_tipo_id'),
+            'propietario_num_id'  => $__fmtTercCol('propietario_tipo_id'),
+            'fecha_cita_cargue'   => static fn ($v, $f) => ($__fmtCita)($v, $f, 'hora_cita_cargue'),
+            'fecha_cita_descargue' => static fn ($v, $f) => ($__fmtCita)($v, $f, 'hora_cita_descargue'),
         ]); ?>
     </section>
 
@@ -81,7 +165,7 @@ if (!function_exists('fichaCampos')) {
             'fecha_expedicion'      => 'Fecha expedición',
             'municipio_origen'      => 'Origen',
             'municipio_destino'     => 'Destino',
-            'titular_num_id'        => 'Titular',
+            'titular_num_id'        => 'Tenedor (vehículo)',
             'placa_vehiculo'        => 'Placa',
             'conductor_num_id'      => 'Conductor',
             'valor_flete_pactado'   => 'Flete pactado',
@@ -91,6 +175,12 @@ if (!function_exists('fichaCampos')) {
             'fecha_pago_saldo'      => 'Fecha pago saldo',
             'nro_poliza'            => 'Nro. póliza',
             'rndc_ingreso_id'       => 'Ingreso RNDC',
+        ], [
+            'municipio_origen'     => $__fmtMuni,
+            'municipio_destino'    => $__fmtMuni,
+            'municipio_pago_saldo' => $__fmtMuni,
+            'titular_num_id'       => $__fmtTercCol('titular_tipo_id'),
+            'conductor_num_id'     => $__fmtTercCol('conductor_tipo_id'),
         ]); ?>
     </section>
 </div>

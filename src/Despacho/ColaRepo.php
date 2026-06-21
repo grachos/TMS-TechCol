@@ -56,8 +56,7 @@ final class ColaRepo
             ['remitente_tipo_id', 'remitente_num_id'],
             ['destinatario_tipo_id', 'destinatario_num_id'],
             ['conductor_tipo_id', 'conductor_num_id'],
-            ['propietario_carga_tipo_id', 'propietario_carga_num_id'],
-            ['titular_tipo_id', 'titular_num_id'],
+            ['generador_tipo_id', 'generador_num_id'],
         ] as [$ct, $cn]) {
             $tipo = $s[$ct] ?? null;
             $num  = $s[$cn] ?? null;
@@ -84,7 +83,7 @@ final class ColaRepo
         }
 
         // 3) Remesa y 4) Manifiesto (payload XML completo, sin credenciales).
-        $this->insertarCola($pdo, $solicitudId, 'remesa', (int) $remesa['id'], $this->payloadRemesa($remesa));
+        $this->insertarCola($pdo, $solicitudId, 'remesa', (int) $remesa['id'], $this->payloadRemesa($remesa, $pdo));
         $this->insertarCola($pdo, $solicitudId, 'manifiesto', (int) $manif['id'], $this->payloadManifiesto($manif, $remesa, $pdo));
 
         unset($maxIntentos);
@@ -213,36 +212,47 @@ final class ColaRepo
     // ---------- Construcción de payloads (variables RNDC) ----------
 
     /** @param array<string,mixed> $r remesa */
-    private function payloadRemesa(array $r): string
+    private function payloadRemesa(array $r, ?PDO $pdo = null): string
     {
+        $sedeTercero = static function (string $tipo, string $num) use ($pdo): string {
+            if ($pdo === null || $tipo === '' || $num === '') {
+                return '0';
+            }
+            $f = $pdo->prepare('SELECT sede FROM tercero WHERE tipo_id = ? AND num_id = ?');
+            $f->execute([$tipo, $num]);
+            $row = $f->fetch();
+            return $row !== false && ($row['sede'] ?? '') !== '' ? $row['sede'] : '0';
+        };
+
         $vars = [
-            'NUMNITEMPRESATRANSPORTE'         => config()['rndc']['empresa'],
-            'consecutivoRemesa'               => (new EmpresaRepo())->siguienteRadicadoRemesa(),
-            'CONSECUTIVOREMESA'               => $r['num_remesa'],
-            'CODOPERACIONTRANSPORTE'          => $r['operacion_transporte'],
-            'CODNATURALEZACARGA'              => $r['naturaleza_carga'],
-            'CANTIDADCARGADA'                 => self::num($r['cantidad_cargada']),
-            'UNIDADMEDIDACAPACIDAD'           => $r['unidad_medida'],
-            'CODTIPOEMPAQUE'                  => $r['tipo_empaque'] ?: '0',
-            'MERCANCIAREMESA'                 => $r['mercancia_codigo'],
-            'DESCRIPCIONCORTAPRODUCTO'        => $r['descripcion_producto'],
-            'CODTIPOIDREMITENTE'              => $r['remitente_tipo_id'],
-            'NUMIDREMITENTE'                  => $r['remitente_num_id'],
-            'CODSEDEREMITENTE'                => '0',
-            'CODTIPOIDDESTINATARIO'           => $r['destinatario_tipo_id'],
-            'NUMIDDESTINATARIO'               => $r['destinatario_num_id'],
-            'CODSEDEDESTINATARIO'             => '0',
-            'HORASPACTOCARGA'                 => $r['horas_pacto_cargue'] ?? '1',
-            'MINUTOSPACTOCARGA'               => $r['minutos_pacto_cargue'] ?? '0',
-            'HORASPACTODESCARGUE'             => $r['horas_pacto_descargue'],
-            'MINUTOSPACTODESCARGUE'           => $r['minutos_pacto_descargue'] ?? '0',
-            'CODTIPOIDPROPIETARIO'            => $r['propietario_tipo_id'],
-            'NUMIDPROPIETARIO'                => $r['propietario_num_id'],
-            'CODSEDEPROPIETARIO'              => '0',
-            'FECHACITAPACTADACARGUE'          => self::fecha($r['fecha_cita_cargue']),
-            'HORACITAPACTADACARGUE'           => $r['hora_cita_cargue'],
-            'FECHACITAPACTADADESCARGUE'       => self::fecha($r['fecha_cita_descargue']),
-            'HORACITAPACTADADESCARGUEREMESA'  => $r['hora_cita_descargue'],
+            'NUMNITEMPRESATRANSPORTE'  => config()['rndc']['empresa'],
+            'consecutivoRemesa'        => (new EmpresaRepo())->siguienteConsecutivoRemesa(),
+            'codOperacionTransporte'   => $r['operacion_transporte'],
+            'codTipoEmpaque'           => $r['tipo_empaque'] ?: '0',
+            'codNaturalezaCarga'       => $r['naturaleza_carga'],
+            'descripcionCortaProducto' => $r['descripcion_producto'],
+            'mercanciaRemesa'          => $r['mercancia_codigo'],
+            'cantidadCargada'          => self::num($r['cantidad_cargada']),
+            'unidadMedidaCapacidad'    => $r['unidad_medida'],
+            'pesoContenedorVacio'      => '2100',
+            'codTipoIdRemitente'       => $r['remitente_tipo_id'],
+            'numIdRemitente'           => $r['remitente_num_id'],
+            'codSedeRemitente'         => $sedeTercero($r['remitente_tipo_id'], $r['remitente_num_id']),
+            'codTipoIdDestinatario'    => $r['destinatario_tipo_id'],
+            'numIdDestinatario'        => $r['destinatario_num_id'],
+            'codSedeDestinatario'      => $sedeTercero($r['destinatario_tipo_id'], $r['destinatario_num_id']),
+            'codTipoIdPropietario'     => $r['propietario_tipo_id'],
+            'numIdPropietario'         => $r['propietario_num_id'],
+            'duenoPoliza'              => $r['dueno_poliza'] ?? 'N',
+            'horasPactoCarga'          => $r['horas_pacto_cargue'] ?? '1',
+            'minutospactocarga'        => $r['minutos_pacto_cargue'] ?? '0',
+            'fechaCitaPactadaCargue'   => self::fecha($r['fecha_cita_cargue']),
+            'horaCitaPactadaCargue'    => $r['hora_cita_cargue'],
+            'horasPactoDescargue'      => $r['horas_pacto_descargue'],
+            'minutosPactoDescargue'    => $r['minutos_pacto_descargue'] ?? '0',
+            'fechaCitaPactadaDescargue' => self::fecha($r['fecha_cita_descargue']),
+            'horaCitaPactadaDescargueRemesa' => $r['hora_cita_descargue'],
+            'codSedePropietario'       => $sedeTercero($r['propietario_tipo_id'], $r['propietario_num_id']),
         ];
         return RndcClient::renderVariables($vars);
     }

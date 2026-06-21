@@ -15,6 +15,16 @@ final class CatalogoRepo
         return db()->query('SELECT codigo, descripcion FROM empaque ORDER BY descripcion')->fetchAll();
     }
 
+    /** Descripción de un tipo de empaque por su código. */
+    public function empaquePorCodigo(string $codigo): ?string
+    {
+        if ($codigo === '') { return null; }
+        $stmt = db()->prepare('SELECT descripcion FROM empaque WHERE codigo = ?');
+        $stmt->execute([$codigo]);
+        $v = $stmt->fetchColumn();
+        return $v !== false ? (string) $v : null;
+    }
+
     /** @return list<array{codigo:string,descripcion:string}> */
     public function carrocerias(): array
     {

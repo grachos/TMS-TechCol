@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../Maestro/EmpresaRepo.php';
+require_once __DIR__ . '/../Maestro/TerceroRepo.php';
 require_once __DIR__ . '/../Despacho/ColaRepo.php';
 
 final class SolicitudRepo
@@ -22,12 +23,12 @@ final class SolicitudRepo
     private const CAMPOS_DESPACHO = [
         'placa_vehiculo',
         'conductor_tipo_id', 'conductor_num_id',
-        'propietario_carga_tipo_id', 'propietario_carga_num_id',
         'fecha_cita_cargue', 'hora_cita_cargue',
         'fecha_cita_descargue', 'hora_cita_descargue',
         'horas_pacto_cargue', 'minutos_pacto_cargue',
         'horas_pacto_descargue', 'minutos_pacto_descargue',
         'responsable_pago_cargue', 'responsable_pago_descargue',
+        'valor_anticipo',
     ];
 
     /**
@@ -37,16 +38,16 @@ final class SolicitudRepo
      */
     private const CAMPOS = [
         'consecutivo', 'fecha_solicitud', 'operacion_transporte', 'tipo_viaje',
-        'municipio_origen', 'municipio_destino', 'municipio_pago_saldo',
+        'municipio_pago_saldo',
         'remitente_tipo_id', 'remitente_num_id',
         'destinatario_tipo_id', 'destinatario_num_id',
-        'titular_tipo_id', 'titular_num_id',
+        'generador_tipo_id', 'generador_num_id',
         'naturaleza_carga', 'tipo_empaque', 'mercancia_codigo',
         'descripcion_producto', 'cantidad_cargada', 'unidad_medida', 'peso', 'valor_mercancia',
-        'valor_flete', 'valor_anticipo', 'porcentaje_ica',
+        'valor_flete', 'porcentaje_ica',
         'retencion_ica', 'retencion_fuente', 'fopat',
         'tipo_flete', 'tipo_valor_pactado', 'fecha_pago_saldo',
-        'observaciones',
+        'observaciones', 'dueno_poliza',
     ];
 
     /**
@@ -71,16 +72,23 @@ final class SolicitudRepo
         if (empty($fila['fecha_solicitud'])) {
             $fila['fecha_solicitud'] = date('Y-m-d');
         }
-        // Auto-generar consecutivo desde el contador de la empresa.
-        if (empty($fila['consecutivo'])) {
-            $fila['consecutivo'] = (new EmpresaRepo())->siguienteRemesa();
-        }
+        // El consecutivo de solicitud se asigna post-INSERT con el id (en crear()).
         // Retenciones calculadas en el servidor (no se confía en el cliente).
         $flete = (float) ($fila['valor_flete'] ?? 0);
         $pIca  = (float) ($fila['porcentaje_ica'] ?? 0);  // tarifa ICA por mil
         $fila['retencion_ica']    = round($flete * $pIca / 1000, 2);
         $fila['retencion_fuente'] = round($flete * 0.01, 2);   // 1%
         $fila['fopat']            = round($flete * 0.001, 2);  // 0.1%
+        // Municipios desde los terceros (remitente → origen, destinatario → destino).
+        $repo = new TerceroRepo();
+        if (!empty($fila['remitente_num_id'])) {
+            $t = $repo->obtenerPorTipoNum((string) $fila['remitente_tipo_id'], (string) $fila['remitente_num_id']);
+            $fila['municipio_origen'] = $t['cod_municipio'] ?? $fila['municipio_origen'] ?? null;
+        }
+        if (!empty($fila['destinatario_num_id'])) {
+            $t = $repo->obtenerPorTipoNum((string) $fila['destinatario_tipo_id'], (string) $fila['destinatario_num_id']);
+            $fila['municipio_destino'] = $t['cod_municipio'] ?? $fila['municipio_destino'] ?? null;
+        }
         return $fila;
     }
 
@@ -96,6 +104,12 @@ final class SolicitudRepo
             $stmt = $pdo->prepare("INSERT INTO solicitud_servicio ($cols) VALUES ($ph)");
             $stmt->execute($fila);
             $id = (int) $pdo->lastInsertId();
+
+            // Auto-consecutivo: usar el id si el usuario no digita uno.
+            if (empty($fila['consecutivo'])) {
+                $pdo->prepare('UPDATE solicitud_servicio SET consecutivo = ? WHERE id = ?')
+                    ->execute([(string) $id, $id]);
+            }
 
             $this->sembrarRemesa($pdo, $id, $fila);
             $this->sembrarManifiesto($pdo, $id, $fila);
@@ -172,7 +186,11 @@ final class SolicitudRepo
             $this->sembrarRemesa($pdo, $id, $s);
             $this->sembrarManifiesto($pdo, $id, $s);
 
-            // 3) Encolar tercero(11) → vehículo(12) → remesa(3) → manifiesto(4).
+            // 3) Auto-incrementar consecutivos de la empresa.
+            (new EmpresaRepo())->siguienteRemesa();
+            (new EmpresaRepo())->siguienteManifiesto();
+
+            // 4) Encolar tercero(11) → vehículo(12) → remesa(3) → manifiesto(4).
             (new ColaRepo())->encolar($pdo, $id);
 
             $pdo->commit();
@@ -195,6 +213,7 @@ final class SolicitudRepo
             'descripcion_producto' => $s['descripcion_producto'] ?? null,
             'cantidad_cargada'     => $s['cantidad_cargada'] ?? null,
             'unidad_medida'        => $s['unidad_medida'] ?? null,
+            'peso'                 => $s['peso'] ?? null,
             'remitente_tipo_id'    => $s['remitente_tipo_id'] ?? null,
             'remitente_num_id'     => $s['remitente_num_id'] ?? null,
             'destinatario_tipo_id' => $s['destinatario_tipo_id'] ?? null,
@@ -202,8 +221,8 @@ final class SolicitudRepo
             'municipio_cargue'     => $s['municipio_origen'] ?? null,
             'municipio_descargue'  => $s['municipio_destino'] ?? null,
             // Datos completados al confirmar el despacho (Fase 4):
-            'propietario_tipo_id'    => $s['propietario_carga_tipo_id'] ?? null,
-            'propietario_num_id'     => $s['propietario_carga_num_id'] ?? null,
+            'propietario_tipo_id'    => $s['generador_tipo_id'] ?? null,
+            'propietario_num_id'     => $s['generador_num_id'] ?? null,
             'fecha_cita_cargue'      => $s['fecha_cita_cargue'] ?? null,
             'hora_cita_cargue'       => $s['hora_cita_cargue'] ?? null,
             'fecha_cita_descargue'   => $s['fecha_cita_descargue'] ?? null,
@@ -212,6 +231,7 @@ final class SolicitudRepo
             'minutos_pacto_cargue'   => $s['minutos_pacto_cargue'] ?? null,
             'horas_pacto_descargue'  => $s['horas_pacto_descargue'] ?? null,
             'minutos_pacto_descargue' => $s['minutos_pacto_descargue'] ?? null,
+            'dueno_poliza'           => $s['dueno_poliza'] ?? 'N',
         ];
         $this->insertar($pdo, 'remesa', $remesa);
     }
@@ -227,8 +247,8 @@ final class SolicitudRepo
             'operacion_transporte' => $s['operacion_transporte'] ?? null,
             'municipio_origen'     => $s['municipio_origen'] ?? null,
             'municipio_destino'    => $s['municipio_destino'] ?? null,
-            'titular_tipo_id'      => $s['titular_tipo_id'] ?? null,
-            'titular_num_id'       => $s['titular_num_id'] ?? null,
+            'titular_tipo_id'      => self::tenedorCampo($pdo, $s['placa_vehiculo'] ?? '', 'tenedor_tipo_id'),
+            'titular_num_id'       => self::tenedorCampo($pdo, $s['placa_vehiculo'] ?? '', 'tenedor_num_id'),
             'valor_flete_pactado'  => $s['valor_flete'] ?? null,
             'valor_anticipo'       => $s['valor_anticipo'] ?? null,
             'retencion_ica'        => $s['retencion_ica'] ?? null,
@@ -257,15 +277,36 @@ final class SolicitudRepo
     }
 
     /** @return list<array<string,mixed>> */
-    public function listar(int $limite = 100): array
+    public function listar(int $limite = 100, ?string $desde = null, ?string $hasta = null): array
     {
-        $stmt = db()->query(
-            'SELECT id, consecutivo, fecha_solicitud, municipio_origen, municipio_destino,
-                    placa_vehiculo, estado, created_at
-             FROM solicitud_servicio
-             ORDER BY id DESC
-             LIMIT ' . (int) $limite
-        );
+        $sql = 'SELECT s.id, s.consecutivo, s.fecha_solicitud,
+                       s.municipio_origen, s.municipio_destino,
+                       s.valor_flete, s.placa_vehiculo, s.estado,
+                       s.generador_tipo_id, s.generador_num_id,
+                       r.nombre AS remitente_nombre,
+                       d.nombre AS destinatario_nombre,
+                       g.nombre AS generador_nombre,
+                       om.nombre_completo AS origen_nombre,
+                       dm.nombre_completo AS destino_nombre
+                FROM solicitud_servicio s
+                LEFT JOIN tercero r ON r.tipo_id = s.remitente_tipo_id AND r.num_id = s.remitente_num_id
+                LEFT JOIN tercero d ON d.tipo_id = s.destinatario_tipo_id AND d.num_id = s.destinatario_num_id
+                LEFT JOIN tercero g ON g.tipo_id = s.generador_tipo_id AND g.num_id = s.generador_num_id
+                LEFT JOIN municipio om ON om.codigo_rndc = s.municipio_origen
+                LEFT JOIN municipio dm ON dm.codigo_rndc = s.municipio_destino
+                WHERE 1=1';
+        $params = [];
+        if ($desde !== null) {
+            $sql .= ' AND s.fecha_solicitud >= ?';
+            $params[] = $desde;
+        }
+        if ($hasta !== null) {
+            $sql .= ' AND s.fecha_solicitud <= ?';
+            $params[] = $hasta;
+        }
+        $sql .= ' ORDER BY s.id DESC LIMIT ' . (int) $limite;
+        $stmt = db()->prepare($sql);
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
@@ -289,5 +330,14 @@ final class SolicitudRepo
             'manifiesto' => $m->fetch() ?: null,
             'remesa'     => $r->fetch() ?: null,
         ];
+    }
+
+    private static function tenedorCampo(PDO $pdo, string $placa, string $col): ?string
+    {
+        if ($placa === '') { return null; }
+        $q = $pdo->prepare("SELECT $col FROM vehiculo WHERE placa = ?");
+        $q->execute([strtoupper($placa)]);
+        $v = $q->fetch(PDO::FETCH_COLUMN);
+        return $v !== false ? $v : null;
     }
 }

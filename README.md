@@ -48,7 +48,7 @@ light-tms/
 │   ├── municipios.sql       DIVIPOLA
 │   ├── maestros.sql         tercero + vehículo
 │   ├── catalogo_configuracion.sql  configuraciones de unidad de carga
-│   └── migracion_v*.sql     migraciones incrementales (v2–v12)
+│   └── migracion_v*.sql     migraciones incrementales (v2–v15)
 ├── .env.example
 └── README.md
 ```
@@ -85,7 +85,10 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
    | 14 | `migracion_v9.sql` | Elimina `REMDUENOPOLIZA` (`tomador_poliza`) |
    | 15 | `migracion_v10.sql` | Consecutivos `consecutivo_remesa`, `consecutivo_manifiesto` en empresa |
    | 16 | `migracion_v11.sql` | `radicado_remesa` en empresa |
-   | 17 | `migracion_v12.sql` | **Reestructura tabla `producto`** con columnas del CSV oficial RNDC |
+    | 17 | `migracion_v12.sql` | **Reestructura tabla `producto`** con columnas del CSV oficial RNDC |
+    | 18 | `migracion_v13.sql` | `dueno_poliza` en solicitud_servicio y remesa |
+    | 19 | `migracion_v14.sql` | `conductor_tipo_id`, `conductor_num_id` en vehiculo (conductor por defecto) |
+    | 20 | `migracion_v15.sql` | `consecutivo_remesa`, `consecutivo_manifiesto` pasan a VARCHAR, se elimina `radicado_remesa` |
 
    > La migración v12 reemplaza la tabla `producto` completa. Después de ejecutarla,
    > corre el script `importar_productos_csv.php` para poblar los 3758 productos desde
@@ -124,6 +127,26 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
   - Corregido error REM020: `CONSECUTIVOREMESA` ahora se envía desde `remesa.num_remesa`
   - Visor XML en cola.xml: muestra el XML enviado junto a la respuesta de RNDC en errores
   - Contadores auto-incrementales en empresa: `consecutivo_remesa`, `consecutivo_manifiesto` (v10) y `radicado_remesa` (v11)
+- [x] **Normalización del XML remesa (v13):**
+  - Variables renombradas a camelCase para coincidir con el RNDC (ej. `CODOPERACIONTRANSPORTE` → `codOperacionTransporte`)
+  - Eliminado `CONSECUTIVOREMESA` duplicado (se envía solo `consecutivoRemesa`)
+  - Agregados `pesoContenedorVacio` (constante `2100`), `duenoPoliza`, `codSedePropietario` al XML
+  - `codSedeRemitente`/`codSedeDestinatario`/`codSedePropietario` se obtienen del campo `sede` del `tercero` maestro
+  - Nuevo campo `dueno_poliza` en solicitud_servicio + remesa (v13)
+- [x] **Ajustes despacho y auto-completado (v14):**
+  - Remesa usa procesoid `3`
+  - `valor_anticipo` movido del formulario inicial al de confirmar despacho
+  - Conductor y propietario de la carga se auto-llenan desde el vehículo al seleccionar placa
+  - Nuevos campos `conductor_tipo_id`, `conductor_num_id` en `vehiculo` (conductor por defecto)
+  - Propietario de la carga = tenedor del vehículo
+  - Conductor muestra nombre completo (nombres + apellidos)
+  - Vista previa XML siempre disponible en cola
+- [x] **Consecutivos como string (v15):**
+  - `consecutivo_remesa`, `consecutivo_manifiesto` cambiados a VARCHAR(20) con formato `REM-00001`/`MAN-00001`
+  - Auto-incremento ocurre al confirmar despacho, no al crear solicitud
+  - `consecutivoRemesa` del XML se toma de `consecutivo_remesa`
+  - Eliminado `radicado_remesa`
+  - Consecutivo de solicitud auto-generado desde el `id` de la BD (empieza en 1)
 - [x] **Catálogo de productos RNDC actualizado:**
   - Tabla `producto` reestructurada con 16 columnas del CSV oficial (v12)
   - 3758 productos cargados: CP (carga peligrosa), DP (desecho peligroso), DCRP (desagregación) y 00 (general)

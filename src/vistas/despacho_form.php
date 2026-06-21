@@ -33,17 +33,6 @@ $acVehiculo = static function (string $name, string $val): string {
         . '<input type="hidden" name="' . e($name) . '" data-ac-field="placa" value="' . e($val) . '">'
         . '</div>';
 };
-/** Picker de tercero (tipo + num). */
-$acTercero = static function (string $tipoName, string $numName, string $tipo, string $num, string $params = ''): string {
-    $txt = $num !== '' ? trim($tipo . ' ' . $num) : '';
-    $p   = $params !== '' ? ' data-ac-params="' . e($params) . '"' : '';
-    return '<div class="autocompletar" data-ac="terceros"' . $p . '>'
-        . '<input type="text" class="ac-texto" autocomplete="off" placeholder="Buscar tercero…" value="' . e($txt) . '">'
-        . '<ul class="ac-lista"></ul>'
-        . '<input type="hidden" name="' . e($tipoName) . '" data-ac-field="tipo_id" value="' . e($tipo) . '">'
-        . '<input type="hidden" name="' . e($numName) . '" data-ac-field="num_id" value="' . e($num) . '">'
-        . '</div>';
-};
 ?>
 <div class="cabecera-lista">
     <h1>Confirmar despacho · Solicitud #<?= (int) $s['id'] ?></h1>
@@ -61,20 +50,28 @@ $acTercero = static function (string $tipoName, string $numName, string $tipo, s
         <legend>Vehículo y conductor</legend>
         <div class="grid">
             <label>Vehículo (placa) <?= $acVehiculo('placa_vehiculo', (string) ($s['placa_vehiculo'] ?? '')) ?></label>
-            <label>Conductor <?= $acTercero('conductor_tipo_id', 'conductor_num_id', (string) ($s['conductor_tipo_id'] ?? ''), (string) ($s['conductor_num_id'] ?? ''), 'solo_conductor=1') ?></label>
+            <label>Conductor
+                <input type="hidden" name="conductor_tipo_id" id="conductor_tipo_id" value="<?= $v('conductor_tipo_id') ?>">
+                <input type="hidden" name="conductor_num_id" id="conductor_num_id" value="<?= $v('conductor_num_id') ?>">
+                <span id="conductor_label" class="campo-lectura"><?php
+                    $ct = $s['conductor_tipo_id'] ?? '';
+                    $cn = $s['conductor_num_id'] ?? '';
+                    echo e($ct && $cn ? trim("$ct $cn") : '(seleccione placa)');
+                ?></span>
+            </label>
+            <label>Tenedor
+                <span id="tenedor_label" class="campo-lectura"><?php
+                    $tt = $s['vehiculo_tenedor_tipo_id'] ?? '';
+                    $tn = $s['vehiculo_tenedor_num_id'] ?? '';
+                    echo e($tt && $tn ? trim($tt . ' ' . $tn) : '(seleccione placa)');
+                ?></span>
+            </label>
         </div>
-        <p class="ayuda">El remolque se hereda del maestro de vehículos.</p>
+        <p class="ayuda">El remolque se hereda del maestro de vehículos. Conductor y tenedor se cargan automáticamente desde el vehículo.</p>
     </fieldset>
 
     <fieldset>
-        <legend>Propietario de la carga</legend>
-        <div class="grid">
-            <label class="ancho-total">Propietario <?= $acTercero('propietario_carga_tipo_id', 'propietario_carga_num_id', (string) ($s['propietario_carga_tipo_id'] ?? ''), (string) ($s['propietario_carga_num_id'] ?? '')) ?></label>
-        </div>
-    </fieldset>
-
-    <fieldset>
-        <legend>Cargue / Descargue</legend>
+        <legend>Cargue / Descargue / Valores</legend>
         <div class="grid">
             <label>Fecha cita cargue <input type="date" name="fecha_cita_cargue" value="<?= $v('fecha_cita_cargue') ?>"></label>
             <label>Hora cita cargue <input type="time" name="hora_cita_cargue" value="<?= $v('hora_cita_cargue') ?>"></label>
@@ -86,6 +83,7 @@ $acTercero = static function (string $tipoName, string $numName, string $tipo, s
             <label>Minutos pactado descargue <input type="number" min="0" max="59" name="minutos_pacto_descargue" value="<?= $v('minutos_pacto_descargue') ?>"></label>
             <label>Responsable pago cargue <?= selOpc('responsable_pago_cargue', $responsables, (string) ($s['responsable_pago_cargue'] ?? 'E')) ?></label>
             <label>Responsable pago descargue <?= selOpc('responsable_pago_descargue', $responsables, (string) ($s['responsable_pago_descargue'] ?? 'E')) ?></label>
+            <label>Valor del anticipo <input type="number" step="0.01" name="valor_anticipo" value="<?= $v('valor_anticipo') ?>"></label>
         </div>
     </fieldset>
 
