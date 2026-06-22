@@ -172,6 +172,67 @@ final class ColaRepo
         return $res;
     }
 
+    /**
+     * Procesa un solo item de la cola por su id.
+     * @return array{ok:bool,mensaje:string}
+     */
+    public function procesarItem(int $colaId): array
+    {
+        $habilitado = (bool) config()['cola']['envio_habilitado'];
+        $minutos    = (int) config()['cola']['minutos_reintento'];
+        $rndc       = RndcClient::desdeConfig();
+
+        $stmt = db()->prepare('SELECT * FROM cola_envios WHERE id = ?');
+        $stmt->execute([$colaId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            return ['ok' => false, 'mensaje' => "Item #{$colaId} no encontrado."];
+        }
+        if (!in_array($row['estado'], ['pendiente', 'error'], true)) {
+            return ['ok' => false, 'mensaje' => "Estado {$row['estado']} no permite procesar."];
+        }
+
+        $id = (int) $row['id'];
+        if (!$habilitado) {
+            $preview = in_array($row['tipo_documento'], ['remesa', 'manifiesto'], true)
+                ? $rndc->previewXmlInterno((int) $row['proceso_rndc'], (string) $row['payload_xml'])
+                : '(envío del maestro ' . $row['tipo_documento'] . ' #' . $row['referencia_id'] . ')';
+            db()->prepare('UPDATE cola_envios SET respuesta_rndc = ?, ultimo_error = ? WHERE id = ?')
+                ->execute([$preview, 'Modo seguro: envío deshabilitado.', $id]);
+            return ['ok' => true, 'mensaje' => 'Previsualizado (modo seguro).'];
+        }
+
+        if ($this->dependenciaPendiente((int) $row['solicitud_id'], (int) $row['orden'])) {
+            return ['ok' => false, 'mensaje' => 'Hay dependencias pendientes para esta solicitud.'];
+        }
+
+        db()->prepare("UPDATE cola_envios SET estado = 'enviando' WHERE id = ?")->execute([$id]);
+        $resp = $this->enviarFila($rndc, $row);
+
+        if ($resp->ok) {
+            db()->prepare(
+                "UPDATE cola_envios SET estado = 'enviado', rndc_ingreso_id = ?,
+                        respuesta_rndc = ?, ultimo_error = NULL,
+                        intentos = intentos + 1, enviado_at = NOW()
+                 WHERE id = ?"
+            )->execute([$resp->ingresoId, $resp->respuestaCruda, $id]);
+            $this->marcarOrigen($row, $resp);
+            return ['ok' => true, 'mensaje' => 'Enviado correctamente.'];
+        }
+
+        $intentos = (int) $row['intentos'] + 1;
+        $agotado  = $intentos >= (int) $row['max_intentos'];
+        db()->prepare(
+            'UPDATE cola_envios SET estado = ?, intentos = ?, ultimo_error = ?,
+                    respuesta_rndc = ?,
+                    programado_para = ' . ($agotado ? 'NULL' : 'DATE_ADD(NOW(), INTERVAL ? MINUTE)') . '
+             WHERE id = ?'
+        )->execute($agotado
+            ? ['error', $intentos, $resp->error, $resp->respuestaCruda, $id]
+            : ['pendiente', $intentos, $resp->error, $resp->respuestaCruda, $minutos, $id]);
+        return ['ok' => false, 'mensaje' => $resp->error];
+    }
+
     /** Envía una fila según su tipo (maestros vía sus repos; documentos vía XML). */
     private function enviarFila(RndcClient $rndc, array $row): RndcRespuesta
     {

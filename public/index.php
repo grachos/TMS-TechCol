@@ -383,6 +383,12 @@ try {
             }
             break;
 
+        case 'cola.procesar_item':
+            $id = (int) ($_GET['id'] ?? 0);
+            $r2 = (new ColaRepo())->procesarItem($id);
+            header('Location: ' . ruta('cola', [$r2['ok'] ? 'ok' : 'err' => $r2['mensaje']]));
+            break;
+
         case 'cola.xml':
             $fila = db()->prepare('SELECT * FROM cola_envios WHERE id = ?');
             $fila->execute([(int) ($_GET['id'] ?? 0)]);

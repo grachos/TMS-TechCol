@@ -22,7 +22,7 @@ function layout_top(string $titulo, string $activo = ''): void
 
     // Determinar qué grupo contiene la página activa para marcar el menú.
     $grupos = [
-        'operacion' => ['inicio', 'solicitudes', 'solicitud.ver', 'solicitud.editar', 'solicitud.nueva', 'despachos', 'despacho.confirmar', 'despacho.guardar', 'despacho.procesar', 'cola', 'cola.procesar', 'cola.xml'],
+        'operacion' => ['inicio', 'solicitudes', 'solicitud.ver', 'solicitud.editar', 'solicitud.nueva', 'despachos', 'despacho.confirmar', 'despacho.guardar', 'despacho.procesar', 'cola', 'cola.procesar', 'cola.procesar_item', 'cola.xml'],
         'maestros'  => ['terceros', 'tercero.nuevo', 'tercero.crear', 'tercero.editar', 'tercero.guardar', 'vehiculos', 'vehiculo.nuevo', 'vehiculo.crear', 'vehiculo.editar', 'vehiculo.guardar', 'productos', 'producto.editar', 'empresa', 'empresa.guardar'],
     ];
     $grupoActivo = '';
