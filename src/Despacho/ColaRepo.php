@@ -50,6 +50,7 @@ final class ColaRepo
 
         // 1) Terceros referenciados que existen en el maestro y no están registrados.
         $vistos = [];
+        $remesaId = (int) $remesa['id'];
         foreach ([
             ['remitente_tipo_id', 'remitente_num_id'],
             ['destinatario_tipo_id', 'destinatario_num_id'],
@@ -68,7 +69,7 @@ final class ColaRepo
             $vistos[$clave] = true;
             $t = $this->fila($pdo, 'SELECT id, estado_rndc FROM tercero WHERE tipo_id = ? AND num_id = ?', [$tipo, $num]);
             if ($t !== null && ($t['estado_rndc'] ?? '') !== 'registrado') {
-                $this->insertarCola($pdo, $solicitudId, 'tercero', (int) $t['id'], 'Tercero ' . $tipo . ' ' . $num);
+                $this->insertarCola($pdo, $solicitudId, $remesaId, 'tercero', (int) $t['id'], 'Tercero ' . $tipo . ' ' . $num);
             }
         }
 
@@ -76,26 +77,26 @@ final class ColaRepo
         if (!empty($manif['placa_vehiculo'])) {
             $v = $this->fila($pdo, 'SELECT id, estado_rndc FROM vehiculo WHERE placa = ?', [strtoupper((string) $manif['placa_vehiculo'])]);
             if ($v !== null && ($v['estado_rndc'] ?? '') !== 'registrado') {
-                $this->insertarCola($pdo, $solicitudId, 'vehiculo', (int) $v['id'], 'Vehículo ' . $manif['placa_vehiculo']);
+                $this->insertarCola($pdo, $solicitudId, $remesaId, 'vehiculo', (int) $v['id'], 'Vehículo ' . $manif['placa_vehiculo']);
             }
         }
 
         // 3) Remesa y 4) Manifiesto (payload XML completo, sin credenciales).
-        $this->insertarCola($pdo, $solicitudId, 'remesa', (int) $remesa['id'], $this->payloadRemesa($remesa, $pdo));
-        $this->insertarCola($pdo, $solicitudId, 'manifiesto', (int) $manif['id'], $this->payloadManifiesto($manif, $remesa, $pdo));
+        $this->insertarCola($pdo, $solicitudId, $remesaId, 'remesa', (int) $remesa['id'], $this->payloadRemesa($remesa, $pdo));
+        $this->insertarCola($pdo, $solicitudId, $remesaId, 'manifiesto', (int) $manif['id'], $this->payloadManifiesto($manif, $remesa, $pdo));
 
         unset($maxIntentos);
     }
 
     /** Inserta una fila en la cola. */
-    private function insertarCola(PDO $pdo, int $solicitudId, string $tipo, int $referenciaId, string $payloadXml): void
+    private function insertarCola(PDO $pdo, int $solicitudId, int $remesaId, string $tipo, int $referenciaId, string $payloadXml): void
     {
         $pdo->prepare(
             'INSERT INTO cola_envios
-                (solicitud_id, tipo_documento, referencia_id, proceso_rndc, orden, payload_xml, estado, max_intentos)
-             VALUES (?, ?, ?, ?, ?, ?, \'pendiente\', ?)'
+                (solicitud_id, remesa_id, tipo_documento, referencia_id, proceso_rndc, orden, payload_xml, estado, max_intentos)
+             VALUES (?, ?, ?, ?, ?, ?, ?, \'pendiente\', ?)'
         )->execute([
-            $solicitudId, $tipo, $referenciaId, self::PROCESO[$tipo], self::ORDEN[$tipo],
+            $solicitudId, $remesaId, $tipo, $referenciaId, self::PROCESO[$tipo], self::ORDEN[$tipo],
             $payloadXml, (int) config()['cola']['max_intentos'],
         ]);
     }
@@ -231,6 +232,65 @@ final class ColaRepo
             ? ['error', $intentos, $resp->error, $resp->respuestaCruda, $id]
             : ['pendiente', $intentos, $resp->error, $resp->respuestaCruda, $minutos, $id]);
         return ['ok' => false, 'mensaje' => $resp->error];
+    }
+
+    /**
+     * Procesa los items de cola de un único despacho (remesa + manifiesto + ter/veh).
+     * @return array{ok:bool,mensaje:string}
+     */
+    public function procesarDespacho(int $remesaId): array
+    {
+        $habilitado = (bool) config()['cola']['envio_habilitado'];
+        $minutos    = (int) config()['cola']['minutos_reintento'];
+        $rndc       = RndcClient::desdeConfig();
+        $enviados = 0; $errores = 0;
+
+        $items = db()->prepare(
+            "SELECT * FROM cola_envios
+             WHERE remesa_id = ? AND estado IN ('pendiente','error')
+             ORDER BY orden, id"
+        );
+        $items->execute([$remesaId]);
+        foreach ($items as $row) {
+            $id = (int) $row['id'];
+            if (!$habilitado) {
+                $preview = in_array($row['tipo_documento'], ['remesa', 'manifiesto'], true)
+                    ? $rndc->previewXmlInterno((int) $row['proceso_rndc'], (string) $row['payload_xml'])
+                    : '(envío del maestro ' . $row['tipo_documento'] . ' #' . $row['referencia_id'] . ')';
+                db()->prepare('UPDATE cola_envios SET respuesta_rndc = ?, ultimo_error = ? WHERE id = ?')
+                    ->execute([$preview, 'Modo seguro: envío deshabilitado.', $id]);
+                $errores++;
+                continue;
+            }
+            if ($this->dependenciaPendiente((int) $row['solicitud_id'], (int) $row['orden'])) {
+                continue;
+            }
+            db()->prepare("UPDATE cola_envios SET estado = 'enviando' WHERE id = ?")->execute([$id]);
+            $resp = $this->enviarFila($rndc, $row);
+            if ($resp->ok) {
+                db()->prepare(
+                    "UPDATE cola_envios SET estado = 'enviado', rndc_ingreso_id = ?,
+                            respuesta_rndc = ?, ultimo_error = NULL,
+                            intentos = intentos + 1, enviado_at = NOW()
+                     WHERE id = ?"
+                )->execute([$resp->ingresoId, $resp->respuestaCruda, $id]);
+                $this->marcarOrigen($row, $resp);
+                $enviados++;
+            } else {
+                $intentos = (int) $row['intentos'] + 1;
+                $agotado  = $intentos >= (int) $row['max_intentos'];
+                db()->prepare(
+                    'UPDATE cola_envios SET estado = ?, intentos = ?, ultimo_error = ?,
+                            respuesta_rndc = ?,
+                            programado_para = ' . ($agotado ? 'NULL' : 'DATE_ADD(NOW(), INTERVAL ? MINUTE)') . '
+                     WHERE id = ?'
+                )->execute($agotado
+                    ? ['error', $intentos, $resp->error, $resp->respuestaCruda, $id]
+                    : ['pendiente', $intentos, $resp->error, $resp->respuestaCruda, $minutos, $id]);
+                $errores++;
+            }
+        }
+        return ['ok' => $errores === 0, 'mensaje' => "Enviados: $enviados, errores: $errores."];
     }
 
     /** Envía una fila según su tipo (maestros vía sus repos; documentos vía XML). */

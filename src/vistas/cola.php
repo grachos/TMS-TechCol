@@ -62,12 +62,7 @@ declare(strict_types=1);
                     <td><?= (int) $f['intentos'] ?>/<?= (int) $f['max_intentos'] ?></td>
                     <td><?= e($f['rndc_ingreso_id'] ?? '—') ?></td>
                     <td><small><?= e(mb_strimwidth((string) ($f['ultimo_error'] ?? ''), 0, 80, '…')) ?></small></td>
-                    <td class="acciones-col">
-                        <?php if ($f['estado'] === 'pendiente' || $f['estado'] === 'error'): ?>
-                            <a href="<?= e(ruta('cola.procesar_item', ['id' => (int) $f['id']])) ?>" class="btn btn--small btn--primario">Procesar</a>
-                        <?php endif; ?>
-                        <a href="<?= e(ruta('cola.xml', ['id' => (int) $f['id']])) ?>" target="_blank" class="btn btn--small">XML</a>
-                    </td>
+                    <td><a href="<?= e(ruta('cola.xml', ['id' => (int) $f['id']])) ?>" target="_blank" class="btn btn--small">XML</a></td>
                 </tr>
             <?php endforeach; ?>
         </tbody>
