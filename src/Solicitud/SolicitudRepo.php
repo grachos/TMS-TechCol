@@ -112,6 +112,7 @@ final class SolicitudRepo
             if (empty($fila['consecutivo'])) {
                 $pdo->prepare('UPDATE solicitud_servicio SET consecutivo = ? WHERE id = ?')
                     ->execute([(string) $id, $id]);
+                $fila['consecutivo'] = (string) $id;
             }
 
             $this->sembrarRemesa($pdo, $id, $fila);

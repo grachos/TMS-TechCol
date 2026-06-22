@@ -370,7 +370,7 @@ final class ColaRepo
     {
         return db()->query(
             "SELECT r.id AS remesa_id, r.solicitud_id, s.consecutivo,
-                    r.num_remesa, r.placa_vehiculo AS placa,
+                    r.num_remesa,
                     r.estado_rndc AS estado_remesa
              FROM remesa r
              JOIN solicitud_servicio s ON s.id = r.solicitud_id
