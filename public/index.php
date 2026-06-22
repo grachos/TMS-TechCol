@@ -426,7 +426,9 @@ try {
 
         case 'despachos':
             $pagina = max(1, (int) ($_GET['p'] ?? 1));
-            $res = (new ColaRepo())->listarDespachosConPaginacion((string) ($_GET['q'] ?? ''), $pagina, 10);
+            $desde = !empty($_GET['desde']) ? $_GET['desde'] : null;
+            $hasta = !empty($_GET['hasta']) ? $_GET['hasta'] : null;
+            $res = (new ColaRepo())->listarDespachosConPaginacion((string) ($_GET['q'] ?? ''), $pagina, 10, $desde, $hasta);
             $despachos = $res['items'];
             $total = $res['total'];
             $paginas = (int) ceil($total / 10);
