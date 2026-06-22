@@ -7,8 +7,13 @@ disponible.
 
 ## Concepto central
 
-La **Solicitud de Servicio** se captura **una sola vez** y siembra automáticamente el
-**Manifiesto** y la **Remesa**. El usuario no crea esos documentos por separado.
+La **Solicitud de Servicio** se captura **una sola vez**. Al **confirmar el despacho**
+se siembran automáticamente la **Remesa** y el **Manifiesto** por cada vehículo
+despachado y se encolan para envío al RNDC. El usuario no crea esos documentos por separado.
+
+Los datos de mercancía peligrosa (`codigo_un`, `estado_producto`) se heredan del
+catálogo de **Producto** — no se editan en la solicitud. Si la naturaleza es peligrosa,
+el sistema valida que el producto tenga esos campos antes de permitir guardar.
 
 ## Stack
 
@@ -32,10 +37,10 @@ light-tms/
 ├── src/
 │   ├── config.php           carga .env + config()
 │   ├── db.php               conexión PDO a MariaDB
-│   ├── vista.php            layout + helpers
-│   ├── helpers.php          utilidades
+│   ├── vista.php            layout + helpers (nav con dropdowns)
+│   ├── helpers.php          utilidades (e(), validarProductoPeligrosa())
 │   ├── Maestro/             repositorios (Empresa, Tercero, Vehículo, Municipio, Catálogo)
-│   ├── Solicitud/           SolicitudRepo (captura única → siembra remesa+manifiesto)
+│   ├── Solicitud/           SolicitudRepo (captura única → confirmarDespacho → siembra remesa+manifiesto)
 │   ├── Despacho/            ColaRepo (store-and-forward, payload XML)
 │   ├── Rndc/                Diccionario, RndcClient (SOAP/XML), RenderVariables
 │   └── vistas/              templates PHP (solicitud, cola, empresa, etc.)
@@ -98,6 +103,8 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
     | 27 | `migracion_v22.sql` | Agrega `emf` (NIT Empresa Monitoreo Flota) a maestro_empresa, solicitud_servicio y manifiesto. |
     | 28 | `migracion_v23.sql` | Agrega `codigo_un` + `estado_producto` a producto, solicitud_servicio y remesa para mercancía peligrosa. |
     | 29 | `migracion_v24.sql` | Agrega `remesa_id` a cola_envios para procesar despachos individualmente. |
+    | 30 | `migracion_v25.sql` | Agrega `remesa_id` a manifiesto para vincular remesa ↔ manifiesto. |
+    | 31 | `migracion_v26.sql` | Elimina `codigo_un` y `estado_producto` de solicitud_servicio (se heredan de producto). |
 
    > La migración v12 reemplaza la tabla `producto` completa. Después de ejecutarla,
    > corre el script `importar_productos_csv.php` para poblar los 3758 productos desde
@@ -162,6 +169,24 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
   - Nuevos campos: `tipo`, `partida`, `clase_division`, `peligro_secundario`, `grupo_embalaje`, etc.
   - Script `importar_productos_csv.php` para importar desde CSV del RNDC (conversión W1252→UTF-8)
   - Autocompletado del formulario ahora muestra tipo (con badge de color), clase, peligrosidad y embalaje
+- [x] **Refinamientos de despacho:**
+  - Al confirmar despacho se siembran remesa + manifiesto por cada vehículo y se encolan individualmente
+  - Cada despacho aparece en la lista con botón "Procesar ahora" que envía solo ese despacho
+  - Navegación reorganizada en menús desplegables: **Operación** (Despachos, Cola RNDC, Solicitudes) y **Maestros** (Empresa, Productos, Terceros, Vehículos)
+  - Paginación (10 por página, navegación por bloques) + búsqueda en: terceros, vehículos, solicitudes
+  - Despachos: columna manifiesto, búsqueda por remesa/manifiesto, filtro por fecha (desde/hasta)
+- [x] **Mercancía peligrosa — validación reforzada (v26):**
+  - `codigo_un` y `estado_producto` eliminados del formulario de solicitud — se heredan del producto
+  - Si `naturaleza_carga = 2` (peligrosa), el sistema valida que el producto tenga esos campos y rechaza la solicitud si faltan
+- [x] **Rediseño visual:**
+  - Tema profesional "Freight Terminal" con paleta de colores azul celeste (`--azul-*`)
+  - Encabezado fijo, sombras, tipografía refinada, badges de estado, fichas de detalle
+  - Favicon de camión (SVG)
+- [x] **Diseño responsive:**
+  - Menú hamburguesa en móvil (< 640px)
+  - Tablas con scroll horizontal en pantallas muy angostas
+  - Formularios, fichas, contadores y filtros se apilan verticalmente en móvil
+  - Desplegables navegables por clic en lugar de hover en dispositivos táctiles
 
 > El cliente RNDC (`src/Rndc/RndcClient.php`) está verificado de extremo a extremo
 > contra el servidor real del RNDC con credenciales válidas en `.env`.
@@ -185,16 +210,41 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
 
 ### Consecutivos automáticos
 
-Cada empresa tiene tres contadores que se auto-incrementan al crear una solicitud:
+Cada empresa tiene dos contadores que se auto-incrementan al confirmar un despacho:
 
-| Contador | Columna en `maestro_empresa` | Uso |
-|----------|------------------------------|-----|
-| Remesa | `consecutivo_remesa` | `num_remesa` en la remesa |
-| Manifiesto | `consecutivo_manifiesto` | `num_manifiesto` en el manifiesto |
-| Radicado remesa | `radicado_remesa` | `consecutivoRemesa` en el XML de RNDC |
+| Contador | Columna en `maestro_empresa` | Formato | Uso |
+|----------|------------------------------|---------|-----|
+| Remesa | `consecutivo_remesa` | `REM-00001` | `num_remesa` en la remesa |
+| Manifiesto | `consecutivo_manifiesto` | `MAN-00001` | `num_manifiesto` en el manifiesto |
 
-Si el usuario deja vacío el campo "Consecutivo" en la solicitud, se genera automáticamente
-desde el contador correspondiente de la empresa.
+Estos contadores se reservan en el momento de `confirmarDespacho()`, no al crear
+la solicitud. El XML envía `consecutivoRemesa` extraído del `num_remesa` almacenado.
+
+### Paginación y búsqueda
+
+Las listas de Terceros, Vehículos, Solicitudes y Despachos incluyen:
+
+- **Paginación de 10 registros por página** con navegación por bloques (1-10, 11-20…)
+- **Búsqueda por texto**: terceros (nombre/num_id), vehículos (placa), solicitudes (consecutivo), despachos (num_remesa/num_manifiesto)
+- **Filtro por fecha** en despachos (desde / hasta sobre `created_at`)
+
+### Navegación
+
+El menú superior se organiza en dos grupos con desplegables:
+
+- **Operación**: Inicio, Despachos, Cola RNDC, Solicitudes
+- **Maestros**: Empresa, Productos, Terceros, Vehículos
+
+En móvil (< 640px) la navegación colapsa en un menú hamburguesa y los
+desplegables se abren con clic en lugar de hover.
+
+### Diseño responsive
+
+El sistema se adapta a tres puntos de quiebre:
+
+- **≤ 768px**: contadores 2 columnas, formularios apilados, tablas más compactas
+- **≤ 640px**: menú hamburguesa, navegación vertical, botones a ancho completo
+- **≤ 400px**: contadores 1 columna, tablas con scroll horizontal
 
 ### Catálogo de productos
 
