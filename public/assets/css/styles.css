@@ -389,10 +389,6 @@ section.tarjeta + section.tarjeta { margin-top: 0; }
   text-align: left;
   font-size: 13px;
 }
-.tabla thead {
-  position: sticky;
-  top: 56px;
-}
 .tabla thead th {
   background: var(--slate-50);
   color: var(--slate-500);
@@ -617,6 +613,7 @@ code {
   min-height: 20px;
 }
 .muni-label { font-weight: 600; color: var(--navy-600); }
+.muni-row { display: block; margin-top: 4px; }
 
 /* ---- Map ---- */
 #mapa {

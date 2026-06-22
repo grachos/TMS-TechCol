@@ -95,10 +95,10 @@ if (!function_exists('acMunicipioP')) {
         <legend>2. Partes / Ruta</legend>
         <div class="grid">
             <label class="ancho-total">Remitente <?= acTerceroP($s, 'remitente_tipo_id', 'remitente_num_id', 'Buscar remitente…', '', 'muni_remitente') ?>
-                <small>Municipio: <span id="muni_remitente" class="muni-label"><?= $v('municipio_nombre_origen') ?: '(seleccione remitente)' ?></span></small>
+                <small class="muni-row">Municipio: <span id="muni_remitente" class="muni-label"><?= $v('municipio_nombre_origen') ?: 'Se selecciona al elegir el remitente' ?></span></small>
             </label>
             <label class="ancho-total">Destinatario <?= acTerceroP($s, 'destinatario_tipo_id', 'destinatario_num_id', 'Buscar destinatario…', '', 'muni_destinatario') ?>
-                <small>Municipio: <span id="muni_destinatario" class="muni-label"><?= $v('municipio_nombre_destino') ?: '(seleccione destinatario)' ?></span></small>
+                <small class="muni-row">Municipio: <span id="muni_destinatario" class="muni-label"><?= $v('municipio_nombre_destino') ?: 'Se selecciona al elegir el destinatario' ?></span></small>
             </label>
             <label class="ancho-total">Generador de carga <?= acTerceroP($s, 'generador_tipo_id', 'generador_num_id') ?></label>
             <label>¿Dueño póliza? <?= selOpc('dueno_poliza', ['N' => 'No', 'S' => 'Sí'], $cur('dueno_poliza', 'N'), false) ?></label>
