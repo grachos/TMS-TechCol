@@ -115,9 +115,6 @@ final class SolicitudRepo
                 $fila['consecutivo'] = (string) $id;
             }
 
-            $this->sembrarRemesa($pdo, $id, $fila);
-            $this->sembrarManifiesto($pdo, $id, $fila);
-
             $pdo->commit();
             return $id;
         } catch (Throwable $e) {
@@ -127,8 +124,7 @@ final class SolicitudRepo
     }
 
     /**
-     * Actualiza la solicitud y re-siembra su remesa + manifiesto.
-     * Solo debe usarse mientras la solicitud no esté 'despachada'.
+     * Actualiza la solicitud.
      *
      * @param array<string,mixed> $datos
      */
@@ -142,10 +138,6 @@ final class SolicitudRepo
             $params = $fila;
             $params['id'] = $id;
             $pdo->prepare("UPDATE solicitud_servicio SET $sets WHERE id = :id")->execute($params);
-
-            // Pre-despacho: se regeneran remesa y manifiesto desde la solicitud.
-            $this->sembrarRemesa($pdo, $id, $fila);
-            $this->sembrarManifiesto($pdo, $id, $fila);
 
             $pdo->commit();
         } catch (Throwable $e) {
