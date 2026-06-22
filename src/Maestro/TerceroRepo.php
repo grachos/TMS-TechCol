@@ -105,6 +105,29 @@ final class TerceroRepo
         )->fetchAll();
     }
 
+    /** @return array{items:list<array<string,mixed>>,total:int} */
+    public function listarConPaginacion(string $q = '', int $pagina = 1, int $porPagina = 10): array
+    {
+        $where = '1=1';
+        $params = [];
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $where .= ' AND (nombre LIKE ? OR num_id LIKE ? OR CONCAT_WS(\' \', tipo_id, num_id) LIKE ?)';
+            $params = [$like, $like, $like];
+        }
+        $countStmt = db()->prepare("SELECT COUNT(*) FROM tercero WHERE $where");
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $offset = max(0, ($pagina - 1) * $porPagina);
+        $stmt = db()->prepare(
+            "SELECT id, tipo_id, num_id, nombre, municipio_nombre, es_conductor, estado_rndc, rndc_ingreso_id
+             FROM tercero WHERE $where ORDER BY id DESC LIMIT ? OFFSET ?"
+        );
+        $stmt->execute(array_merge($params, [$porPagina, $offset]));
+        return ['items' => $stmt->fetchAll(), 'total' => $total];
+    }
+
     /** @return array<string,mixed>|null */
     public function obtener(int $id): ?array
     {

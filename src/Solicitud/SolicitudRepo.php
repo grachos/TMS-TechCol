@@ -318,6 +318,51 @@ final class SolicitudRepo
         return $stmt->fetchAll();
     }
 
+    /** @return array{items:list<array<string,mixed>>,total:int} */
+    public function listarConPaginacion(string $q = '', int $pagina = 1, int $porPagina = 10, ?string $desde = null, ?string $hasta = null): array
+    {
+        $from = 'FROM solicitud_servicio s
+                 LEFT JOIN tercero r ON r.tipo_id = s.remitente_tipo_id AND r.num_id = s.remitente_num_id
+                 LEFT JOIN tercero d ON d.tipo_id = s.destinatario_tipo_id AND d.num_id = s.destinatario_num_id
+                 LEFT JOIN tercero g ON g.tipo_id = s.generador_tipo_id AND g.num_id = s.generador_num_id
+                 LEFT JOIN municipio om ON om.codigo_rndc = s.municipio_origen
+                 LEFT JOIN municipio dm ON dm.codigo_rndc = s.municipio_destino';
+        $where = 'WHERE 1=1';
+        $params = [];
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $where .= ' AND s.consecutivo LIKE ?';
+            $params[] = $like;
+        }
+        if ($desde !== null) {
+            $where .= ' AND s.fecha_solicitud >= ?';
+            $params[] = $desde;
+        }
+        if ($hasta !== null) {
+            $where .= ' AND s.fecha_solicitud <= ?';
+            $params[] = $hasta;
+        }
+
+        $countStmt = db()->prepare("SELECT COUNT(*) $from $where");
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $offset = max(0, ($pagina - 1) * $porPagina);
+        $cols = 's.id, s.consecutivo, s.fecha_solicitud,
+                 s.municipio_origen, s.municipio_destino,
+                 s.valor_flete, s.placa_vehiculo, s.estado,
+                 s.cantidad_vehiculos, s.cantidad_vehiculos_original,
+                 s.generador_tipo_id, s.generador_num_id,
+                 r.nombre AS remitente_nombre,
+                 d.nombre AS destinatario_nombre,
+                 g.nombre AS generador_nombre,
+                 om.nombre_completo AS origen_nombre,
+                 dm.nombre_completo AS destino_nombre';
+        $stmt = db()->prepare("SELECT $cols $from $where ORDER BY s.id DESC LIMIT ? OFFSET ?");
+        $stmt->execute(array_merge($params, [$porPagina, $offset]));
+        return ['items' => $stmt->fetchAll(), 'total' => $total];
+    }
+
     /** @return array<string,mixed>|null */
     public function obtener(int $id, ?int $remesaId = null): ?array
     {

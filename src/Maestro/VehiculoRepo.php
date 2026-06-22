@@ -96,6 +96,29 @@ final class VehiculoRepo
         )->fetchAll();
     }
 
+    /** @return array{items:list<array<string,mixed>>,total:int} */
+    public function listarConPaginacion(string $q = '', int $pagina = 1, int $porPagina = 10): array
+    {
+        $where = '1=1';
+        $params = [];
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $where .= ' AND placa LIKE ?';
+            $params = [$like];
+        }
+        $countStmt = db()->prepare("SELECT COUNT(*) FROM vehiculo WHERE $where");
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $offset = max(0, ($pagina - 1) * $porPagina);
+        $stmt = db()->prepare(
+            "SELECT id, placa, cod_configuracion, remolque_placa, tenedor_num_id, estado_rndc, rndc_ingreso_id
+             FROM vehiculo WHERE $where ORDER BY id DESC LIMIT ? OFFSET ?"
+        );
+        $stmt->execute(array_merge($params, [$porPagina, $offset]));
+        return ['items' => $stmt->fetchAll(), 'total' => $total];
+    }
+
     /**
      * Devuelve datos del vehículo más el conductor (con nombre completo)
      * y el tenedor (para autocompletado en el despacho).

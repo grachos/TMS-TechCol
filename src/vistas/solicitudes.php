@@ -2,14 +2,18 @@
 /**
  * Vista: listado de Solicitudes de Servicio.
  * @var array<int,array<string,mixed>> $solicitudes
+ * @var int $total
+ * @var int $pagina
+ * @var int $paginas
  */
 declare(strict_types=1);
 
+$q = (string) ($_GET['q'] ?? '');
 $desde = $_GET['desde'] ?? '';
 $hasta = $_GET['hasta'] ?? '';
 ?>
 <div class="cabecera-lista">
-    <h1>Solicitudes de Servicio</h1>
+    <h1>Solicitudes de Servicio <small><?= number_format($total) ?> registros</small></h1>
     <a href="<?= e(ruta('solicitud.nueva')) ?>" class="btn btn--primario">+ Nueva solicitud</a>
 </div>
 
@@ -17,10 +21,11 @@ $hasta = $_GET['hasta'] ?? '';
 
 <form method="get" class="filtros">
     <input type="hidden" name="r" value="solicitudes">
+    <label>Buscar <input type="text" name="q" value="<?= e($q) ?>" placeholder="Consecutivo…"></label>
     <label>Desde <input type="date" name="desde" value="<?= e($desde) ?>"></label>
     <label>Hasta <input type="date" name="hasta" value="<?= e($hasta) ?>"></label>
     <button type="submit" class="btn">Filtrar</button>
-    <?php if ($desde || $hasta): ?>
+    <?php if ($q || $desde || $hasta): ?>
         <a href="<?= e(ruta('solicitudes')) ?>" class="btn">Limpiar</a>
     <?php endif; ?>
 </form>
@@ -76,4 +81,20 @@ $hasta = $_GET['hasta'] ?? '';
             <?php endforeach; ?>
         </tbody>
     </table>
+    <?php if ($paginas > 1): ?>
+    <?php $bloque = (int) ceil($pagina / 10);
+    $inicio = ($bloque - 1) * 10 + 1;
+    $fin = min($bloque * 10, $paginas); ?>
+    <nav class="paginacion">
+        <?php if ($bloque > 1): ?>
+            <a href="<?= e(ruta('solicitudes', ['q' => $q, 'desde' => $desde, 'hasta' => $hasta, 'p' => $inicio - 1])) ?>" class="btn btn--small">&laquo;</a>
+        <?php endif; ?>
+        <?php for ($i = $inicio; $i <= $fin; $i++): ?>
+            <a href="<?= e(ruta('solicitudes', ['q' => $q, 'desde' => $desde, 'hasta' => $hasta, 'p' => $i])) ?>" class="btn btn--small<?= $i === $pagina ? ' btn--activo' : '' ?>"><?= $i ?></a>
+        <?php endfor; ?>
+        <?php if ($fin < $paginas): ?>
+            <a href="<?= e(ruta('solicitudes', ['q' => $q, 'desde' => $desde, 'hasta' => $hasta, 'p' => $fin + 1])) ?>" class="btn btn--small">&raquo;</a>
+        <?php endif; ?>
+    </nav>
+    <?php endif; ?>
 <?php endif; ?>

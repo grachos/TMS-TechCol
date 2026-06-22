@@ -79,7 +79,11 @@ try {
             break;
 
         case 'terceros':
-            $terceros = (new TerceroRepo())->listar();
+            $pagina = max(1, (int) ($_GET['p'] ?? 1));
+            $res = (new TerceroRepo())->listarConPaginacion((string) ($_GET['q'] ?? ''), $pagina, 10);
+            $terceros = $res['items'];
+            $total = $res['total'];
+            $paginas = (int) ceil($total / 10);
             layout_top('Terceros', 'terceros');
             require __DIR__ . '/../src/vistas/terceros.php';
             layout_bottom();
@@ -151,7 +155,11 @@ try {
             break;
 
         case 'vehiculos':
-            $vehiculos = (new VehiculoRepo())->listar();
+            $pagina = max(1, (int) ($_GET['p'] ?? 1));
+            $res = (new VehiculoRepo())->listarConPaginacion((string) ($_GET['q'] ?? ''), $pagina, 10);
+            $vehiculos = $res['items'];
+            $total = $res['total'];
+            $paginas = (int) ceil($total / 10);
             layout_top('Vehículos', 'vehiculos');
             require __DIR__ . '/../src/vistas/vehiculos.php';
             layout_bottom();
@@ -223,9 +231,13 @@ try {
             break;
         case 'solicitudes':
             $repo = new SolicitudRepo();
+            $pagina = max(1, (int) ($_GET['p'] ?? 1));
             $desde = !empty($_GET['desde']) ? $_GET['desde'] : null;
             $hasta = !empty($_GET['hasta']) ? $_GET['hasta'] : null;
-            $solicitudes = $repo->listar(100, $desde, $hasta);
+            $res = $repo->listarConPaginacion((string) ($_GET['q'] ?? ''), $pagina, 10, $desde, $hasta);
+            $solicitudes = $res['items'];
+            $total = $res['total'];
+            $paginas = (int) ceil($total / 10);
             layout_top('Solicitudes', 'solicitudes');
             require __DIR__ . '/../src/vistas/solicitudes.php';
             layout_bottom();
