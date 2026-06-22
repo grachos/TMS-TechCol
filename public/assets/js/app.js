@@ -230,11 +230,22 @@
         });
     }
 
+    /* ---------- Mobile Nav Toggle ---------- */
+    function initNavToggle() {
+        var toggle = document.querySelector('.nav-toggle');
+        var nav = document.querySelector('.barra__nav');
+        if (!toggle || !nav) return;
+        toggle.addEventListener('click', function () {
+            nav.classList.toggle('abierto');
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         initAutocomplete();
         initMapa();
         initCalculos();
         initVehiculoConductor();
         initMuniLabels();
+        initNavToggle();
     });
 })();
