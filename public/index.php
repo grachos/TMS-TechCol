@@ -405,6 +405,26 @@ try {
             }
             break;
 
+        case 'despachos':
+            $despachos = (new ColaRepo())->listarDespachos();
+            layout_top('Despachos', 'despachos');
+            require __DIR__ . '/../src/vistas/despachos.php';
+            layout_bottom();
+            break;
+
+        case 'despacho.procesar':
+            $id = (int) ($_GET['id'] ?? 0);
+            try {
+                $r2 = (new ColaRepo())->procesarSolicitud($id);
+                $modo = ((bool) config()['cola']['envio_habilitado']) ? 'envío real' : 'modo seguro';
+                $msg = sprintf('Despacho procesado (%s): enviados=%d, errores=%d.', $modo, $r2['enviados'], $r2['errores']);
+                header('Location: ' . ruta('despachos', ['ok' => $msg]));
+            } catch (Throwable $e) {
+                $msg = config()['app']['debug'] ? $e->getMessage() : 'No se pudo procesar el despacho.';
+                header('Location: ' . ruta('despachos', ['err' => $msg]));
+            }
+            break;
+
         case 'empresa':
             $empresa = (new EmpresaRepo())->obtener();
             layout_top('Empresa', 'empresa');

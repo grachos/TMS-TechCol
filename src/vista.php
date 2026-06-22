@@ -22,6 +22,7 @@ function layout_top(string $titulo, string $activo = ''): void
     $nav = [
         'inicio'           => 'Inicio',
         'solicitudes'      => 'Solicitudes',
+        'despachos'        => 'Despachos',
         'terceros'         => 'Terceros',
         'vehiculos'        => 'Vehículos',
         'productos'        => 'Productos',

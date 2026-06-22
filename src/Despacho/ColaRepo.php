@@ -361,6 +361,78 @@ final class ColaRepo
         )->fetchAll();
     }
 
+    /**
+     * Lista despachos (agrupados por remesa) con estado general de cada uno.
+     * @return list<array{remesa_id:int, solicitud_id:int, consecutivo:string, placa:string,
+     *                     estado_remesa:string, num_remesa:string}>
+     */
+    public function listarDespachos(): array
+    {
+        return db()->query(
+            "SELECT r.id AS remesa_id, r.solicitud_id, s.consecutivo,
+                    r.num_remesa, r.placa_vehiculo AS placa,
+                    r.estado_rndc AS estado_remesa
+             FROM remesa r
+             JOIN solicitud_servicio s ON s.id = r.solicitud_id
+             ORDER BY r.id DESC"
+        )->fetchAll();
+    }
+
+    /**
+     * Procesa los items de cola PENDIENTES de una solicitud (tercero, vehículo,
+     * remesa y manifiesto).
+     * @return array{enviados:int,errores:int}
+     */
+    public function procesarSolicitud(int $solicitudId): array
+    {
+        $habilitado = (bool) config()['cola']['envio_habilitado'];
+        $minutos    = (int) config()['cola']['minutos_reintento'];
+        $rndc       = RndcClient::desdeConfig();
+
+        $items = db()->query(
+            "SELECT * FROM cola_envios
+             WHERE solicitud_id = $solicitudId AND estado = 'pendiente'
+             ORDER BY orden, id"
+        )->fetchAll();
+
+        $res = ['enviados' => 0, 'errores' => 0];
+        foreach ($items as $row) {
+            $id = (int) $row['id'];
+            if (!$habilitado) {
+                $res['errores']++;
+                continue;
+            }
+            if ($this->dependenciaPendiente($solicitudId, (int) $row['orden'])) {
+                continue;
+            }
+            db()->prepare("UPDATE cola_envios SET estado = 'enviando' WHERE id = ?")->execute([$id]);
+            $resp = $this->enviarFila($rndc, $row);
+            if ($resp->ok) {
+                db()->prepare(
+                    "UPDATE cola_envios SET estado = 'enviado', rndc_ingreso_id = ?,
+                            respuesta_rndc = ?, ultimo_error = NULL,
+                            intentos = intentos + 1, enviado_at = NOW()
+                     WHERE id = ?"
+                )->execute([$resp->ingresoId, $resp->respuestaCruda, $id]);
+                $this->marcarOrigen($row, $resp);
+                $res['enviados']++;
+            } else {
+                $intentos = (int) $row['intentos'] + 1;
+                $agotado  = $intentos >= (int) $row['max_intentos'];
+                db()->prepare(
+                    'UPDATE cola_envios SET estado = ?, intentos = ?, ultimo_error = ?,
+                            respuesta_rndc = ?,
+                            programado_para = ' . ($agotado ? 'NULL' : 'DATE_ADD(NOW(), INTERVAL ? MINUTE)') . '
+                     WHERE id = ?'
+                )->execute($agotado
+                    ? ['error', $intentos, $resp->error, $resp->respuestaCruda, $id]
+                    : ['pendiente', $intentos, $resp->error, $resp->respuestaCruda, $minutos, $id]);
+                $res['errores']++;
+            }
+        }
+        return $res;
+    }
+
     /** @return array<string,int> conteo por estado */
     public function resumen(): array
     {
