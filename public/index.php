@@ -299,8 +299,9 @@ try {
 
         case 'solicitud.ver':
             $id = (int) ($_GET['id'] ?? 0);
+            $remesaId = isset($_GET['remesa_id']) ? (int) $_GET['remesa_id'] : null;
             $repo = new SolicitudRepo();
-            $datos = $repo->obtener($id);
+            $datos = $repo->obtener($id, $remesaId);
             if ($datos === null) {
                 http_response_code(404);
                 layout_top('No encontrada', 'solicitudes');

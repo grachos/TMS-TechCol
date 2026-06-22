@@ -188,8 +188,8 @@ final class SolicitudRepo
             $s['num_remesa'] = (new EmpresaRepo())->siguienteRemesa();
             $s['num_manifiesto'] = (new EmpresaRepo())->siguienteManifiesto();
 
-            $this->sembrarRemesa($pdo, $id, $s);
-            $this->sembrarManifiesto($pdo, $id, $s);
+            $remesaId = $this->sembrarRemesa($pdo, $id, $s);
+            $this->sembrarManifiesto($pdo, $id, $s, $remesaId);
 
             // 3) Encolar tercero(11) → vehículo(12) → remesa(3) → manifiesto(4).
             (new ColaRepo())->encolar($pdo, $id);
@@ -202,7 +202,7 @@ final class SolicitudRepo
     }
 
     /** @param array<string,mixed> $s */
-    private function sembrarRemesa(PDO $pdo, int $solicitudId, array $s): void
+    private function sembrarRemesa(PDO $pdo, int $solicitudId, array $s): int
     {
         $remesa = [
             'solicitud_id'         => $solicitudId,
@@ -237,15 +237,17 @@ final class SolicitudRepo
             'estado_producto'        => $s['estado_producto'] ?? null,
         ];
         $this->insertar($pdo, 'remesa', $remesa);
+        return (int) $pdo->lastInsertId();
     }
 
     /** @param array<string,mixed> $s */
-    private function sembrarManifiesto(PDO $pdo, int $solicitudId, array $s): void
+    private function sembrarManifiesto(PDO $pdo, int $solicitudId, array $s, ?int $remesaId = null): void
     {
         $empresa = (new EmpresaRepo())->obtener();
         $poliza = $empresa['nro_poliza'] ?? null;
         $manifiesto = [
             'solicitud_id'         => $solicitudId,
+            'remesa_id'            => $remesaId,
             'num_manifiesto'       => $s['num_manifiesto'] ?? null,
             'fecha_expedicion'     => $s['fecha_solicitud'] ?? null,
             'operacion_transporte' => $s['operacion_transporte'] ?? null,
@@ -317,7 +319,7 @@ final class SolicitudRepo
     }
 
     /** @return array<string,mixed>|null */
-    public function obtener(int $id): ?array
+    public function obtener(int $id, ?int $remesaId = null): ?array
     {
         $stmt = db()->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
         $stmt->execute([$id]);
@@ -326,10 +328,17 @@ final class SolicitudRepo
             return null;
         }
 
-        $m = db()->prepare('SELECT * FROM manifiesto WHERE solicitud_id = ?');
-        $m->execute([$id]);
-        $r = db()->prepare('SELECT * FROM remesa WHERE solicitud_id = ?');
-        $r->execute([$id]);
+        if ($remesaId !== null) {
+            $r = db()->prepare('SELECT * FROM remesa WHERE id = ? AND solicitud_id = ?');
+            $r->execute([$remesaId, $id]);
+            $m = db()->prepare('SELECT * FROM manifiesto WHERE remesa_id = ?');
+            $m->execute([$remesaId]);
+        } else {
+            $r = db()->prepare('SELECT * FROM remesa WHERE solicitud_id = ?');
+            $r->execute([$id]);
+            $m = db()->prepare('SELECT * FROM manifiesto WHERE solicitud_id = ?');
+            $m->execute([$id]);
+        }
 
         return [
             'solicitud'  => $solicitud,

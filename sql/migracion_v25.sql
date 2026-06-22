@@ -1,0 +1,1 @@
+ALTER TABLE manifiesto ADD COLUMN remesa_id BIGINT(20) UNSIGNED DEFAULT NULL AFTER solicitud_id;
