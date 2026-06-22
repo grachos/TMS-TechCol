@@ -48,19 +48,19 @@ function layout_top(string $titulo, string $activo = ''): void
             <div class="dropdown <?= $grupoActivo === 'operacion' ? 'activo' : '' ?>">
                 <button class="dropdown__toggle">Operación ▾</button>
                 <div class="dropdown__menu">
-                    <a href="<?= e(ruta('solicitudes')) ?>">Solicitudes</a>
-                    <a href="<?= e(ruta('despachos')) ?>">Despachos</a>
                     <a href="<?= e(ruta('cola')) ?>">Cola RNDC</a>
+                    <a href="<?= e(ruta('despachos')) ?>">Despachos</a>
+                    <a href="<?= e(ruta('solicitudes')) ?>">Solicitudes</a>
                 </div>
             </div>
 
             <div class="dropdown <?= $grupoActivo === 'maestros' ? 'activo' : '' ?>">
                 <button class="dropdown__toggle">Maestros ▾</button>
                 <div class="dropdown__menu">
+                    <a href="<?= e(ruta('empresa')) ?>">Empresa</a>
+                    <a href="<?= e(ruta('productos')) ?>">Productos</a>
                     <a href="<?= e(ruta('terceros')) ?>">Terceros</a>
                     <a href="<?= e(ruta('vehiculos')) ?>">Vehículos</a>
-                    <a href="<?= e(ruta('productos')) ?>">Productos</a>
-                    <a href="<?= e(ruta('empresa')) ?>">Empresa</a>
                 </div>
             </div>
 
