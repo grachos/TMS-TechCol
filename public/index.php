@@ -473,6 +473,114 @@ try {
             header('Location: ' . ruta('empresa', ['ok' => 'Datos de la empresa guardados.']));
             break;
 
+        case 'remesa.pdf':
+            $remesaId = (int) ($_GET['remesa_id'] ?? 0);
+            if (!$remesaId) { http_response_code(400); echo 'Falta remesa_id'; break; }
+
+            $r = db()->prepare('SELECT * FROM remesa WHERE id = ?');
+            $r->execute([$remesaId]);
+            $remesa = $r->fetch();
+            if (!$remesa) { http_response_code(404); echo 'Remesa no encontrada'; break; }
+
+            $s = db()->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
+            $s->execute([$remesa['solicitud_id']]);
+            $solicitud = $s->fetch() ?: [];
+
+            $empresa = (new EmpresaRepo())->obtener();
+
+            $muni = new MunicipioRepo();
+
+            $terceros = [];
+            foreach (['remitente', 'destinatario', 'generador'] as $role) {
+                $colTipo = $role . '_tipo_id';
+                $colNum  = $role . '_num_id';
+                $tid = $remesa[$colTipo] ?? $solicitud[$colTipo] ?? null;
+                $nid = $remesa[$colNum] ?? $solicitud[$colNum] ?? null;
+                if ($tid && $nid) {
+                    $q = db()->prepare('SELECT * FROM tercero WHERE tipo_id = ? AND num_id = ?');
+                    $q->execute([$tid, $nid]);
+                    $terceros[$role] = $q->fetch();
+                } else {
+                    $terceros[$role] = null;
+                }
+            }
+
+            $nombresNat = ['1' => 'NORMAL', '2' => 'PELIGROSA', '3' => 'EXTRADIMENSIONADA',
+                           '4' => 'EXTRAPESADA', '5' => 'DESECHO PELIGROSO', '6' => 'SEMOVIENTES', '7' => 'REFRIGERADA'];
+
+            $natuNombre = $nombresNat[$remesa['naturaleza_carga'] ?? ''] ?? '—';
+
+            require __DIR__ . '/../src/vistas/remesa_pdf.php';
+            break;
+
+        case 'manifiesto.pdf':
+            $remesaId = (int) ($_GET['remesa_id'] ?? 0);
+            if (!$remesaId) { http_response_code(400); echo 'Falta remesa_id'; break; }
+
+            $rr = db()->prepare('SELECT * FROM remesa WHERE id = ?');
+            $rr->execute([$remesaId]);
+            $remesa = $rr->fetch();
+            if (!$remesa) { http_response_code(404); echo 'Remesa no encontrada'; break; }
+
+            $mm = db()->prepare('SELECT * FROM manifiesto WHERE remesa_id = ?');
+            $mm->execute([$remesaId]);
+            $manifiesto = $mm->fetch();
+            if (!$manifiesto) { http_response_code(404); echo 'Manifiesto no encontrado'; break; }
+
+            $ss = db()->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
+            $ss->execute([$remesa['solicitud_id']]);
+            $solicitud = $ss->fetch() ?: [];
+
+            $vv = db()->prepare('SELECT * FROM vehiculo WHERE placa = ?');
+            $vv->execute([$manifiesto['placa_vehiculo']]);
+            $vehiculo = $vv->fetch() ?: [];
+
+            $empresa = (new EmpresaRepo())->obtener();
+            $muni = new MunicipioRepo();
+            $cat = new CatalogoRepo();
+
+            $nombresNat = ['1' => 'NORMAL', '2' => 'PELIGROSA', '3' => 'EXTRADIMENSIONADA',
+                           '4' => 'EXTRAPESADA', '5' => 'DESECHO PELIGROSO', '6' => 'SEMOVIENTES', '7' => 'REFRIGERADA'];
+            $natuNombre = $nombresNat[$remesa['naturaleza_carga'] ?? ''] ?? '—';
+
+            $ops = ['G' => 'GENERAL', 'P' => 'PAQUETEO', 'C' => 'CONTENEDOR CARGADO', 'V' => 'CONTENEDOR VACÍO'];
+            $tipoManifiesto = $ops[$manifiesto['operacion_transporte'] ?? ''] ?? ($manifiesto['operacion_transporte'] ?? '—');
+
+            $responsables = ['E' => 'EMPRESA DE TRANSPORTE', 'R' => 'REMITENTE', 'D' => 'DESTINATARIO'];
+
+            $terceroPorTipoNum = static function (string $tipo, string $num): ?array {
+                $q = db()->prepare('SELECT * FROM tercero WHERE tipo_id = ? AND num_id = ?');
+                $q->execute([$tipo, $num]);
+                return $q->fetch() ?: null;
+            };
+
+            $nomTerc = static function (?array $t): string {
+                if (!$t) { return '—'; }
+                return trim(($t['nombre'] ?? '') . ' ' . ($t['primer_apellido'] ?? '') . ' ' . ($t['segundo_apellido'] ?? '')) ?: ($t['nombre_completo'] ?? '—');
+            };
+
+            $titular = $terceroPorTipoNum($manifiesto['titular_tipo_id'] ?? '', $manifiesto['titular_num_id'] ?? '');
+            $conductor = $terceroPorTipoNum($manifiesto['conductor_tipo_id'] ?? '', $manifiesto['conductor_num_id'] ?? '');
+            $remitente = $terceroPorTipoNum($remesa['remitente_tipo_id'] ?? '', $remesa['remitente_num_id'] ?? '');
+            $destinatario = $terceroPorTipoNum($remesa['destinatario_tipo_id'] ?? '', $remesa['destinatario_num_id'] ?? '');
+            $generador = null;
+            $genTipo = $remesa['propietario_tipo_id'] ?? $solicitud['generador_tipo_id'] ?? null;
+            $genNum  = $remesa['propietario_num_id'] ?? $solicitud['generador_num_id'] ?? null;
+            if ($genTipo && $genNum) {
+                $generador = $terceroPorTipoNum($genTipo, $genNum);
+            }
+
+            $empaqueDesc = $cat->empaquePorCodigo($remesa['tipo_empaque'] ?? '') ?? ($remesa['tipo_empaque'] ?? '—');
+
+            $fmtMuni = static function (?string $cod) use ($muni): string {
+                if (!$cod) { return '—'; }
+                $nom = $muni->nombre($cod);
+                return $nom ?: $cod;
+            };
+
+            require __DIR__ . '/../src/vistas/manifiesto_pdf.php';
+            break;
+
         case 'inicio':
         default:
             require __DIR__ . '/../src/vistas/inicio.php';

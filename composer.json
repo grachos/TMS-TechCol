@@ -1,0 +1,14 @@
+{
+    "name": "pc/tms-light-new",
+    "authors": [
+        {
+            "name": "grachos",
+            "email": "graziany@gmail.com"
+        }
+    ],
+    "require": {
+        "smalot/pdfparser": "^2.12",
+        "dompdf/dompdf": "^3.1",
+        "chillerlan/php-qrcode": "^6.0"
+    }
+}

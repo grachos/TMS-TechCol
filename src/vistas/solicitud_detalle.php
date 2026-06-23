@@ -190,6 +190,10 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
 </div>
 
 <div class="acciones">
+    <?php if ($remesa !== null && !empty($remesa['num_remesa'])): ?>
+        <a href="<?= e(ruta('remesa.pdf', ['remesa_id' => (int) $remesa['id']])) ?>" class="btn" target="_blank">🖨 Imprimir remesa</a>
+        <a href="<?= e(ruta('manifiesto.pdf', ['remesa_id' => (int) $remesa['id']])) ?>" class="btn" target="_blank">🖨 Imprimir manifiesto</a>
+    <?php endif; ?>
     <?php if (($solicitud['estado'] ?? '') === 'borrador'): ?>
         <a href="<?= e(ruta('despacho.confirmar', ['id' => (int) $solicitud['id']])) ?>" class="btn btn--primario">Confirmar despacho</a>
         <a href="<?= e(ruta('solicitud.editar', ['id' => (int) $solicitud['id']])) ?>" class="btn">Editar</a>
