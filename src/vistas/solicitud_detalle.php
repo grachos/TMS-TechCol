@@ -1,13 +1,12 @@
 <?php
 /**
- * Vista: detalle de una Solicitud con su Manifiesto y Remesa sembrados.
+ * Vista: detalle de una Solicitud con su Manifiesto y Remesas.
  * @var array<string,mixed>      $solicitud
  * @var array<string,mixed>|null $manifiesto
- * @var array<string,mixed>|null $remesa
+ * @var list<array<string,mixed>> $remesas
  */
 declare(strict_types=1);
 
-/** Imprime una tabla clave/valor con formateo opcional. */
 if (!function_exists('fichaCampos')) {
     function fichaCampos(?array $fila, array $campos, array $format = []): void
     {
@@ -67,24 +66,18 @@ $__fmtCita = static function (?string $fecha, ?array $fila, string $horaCol): st
 };
 
 $__operaciones = ['G' => 'General', 'P' => 'Paqueteo', 'C' => 'Contenedor Cargado', 'V' => 'Contenedor Vacío'];
-
 $__naturalezas = [
     '1' => 'Carga normal', '2' => 'Carga peligrosa', '3' => 'Carga extradimensionada',
     '4' => 'Carga extrapesada', '5' => 'Desechos peligrosos', '6' => 'Semovientes', '7' => 'Refrigerada',
 ];
-
 $__cat = new CatalogoRepo();
-
 $__fmtOp = static fn (?string $v) => e($v ? ($__operaciones[$v] ?? $v) : '—');
-
 $__fmtNatu = static fn (?string $v) => e($v ? ($__naturalezas[$v] ?? $v) : '—');
-
 $__fmtEmpaque = static function (?string $v) use ($__cat): string {
     if (!$v) { return '—'; }
     $desc = $__cat->empaquePorCodigo($v);
     return e($v . ($desc ? ' - ' . $desc : ''));
 };
-
 $__fmtProducto = static function (?string $v) use ($__cat): string {
     if (!$v) { return '—'; }
     $p = $__cat->productoPorCodigo($v);
@@ -112,7 +105,7 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
         'destinatario_num_id'  => 'Destinatario',
         'generador_num_id'     => 'Generador de carga',
         'descripcion_producto' => 'Producto',
-        'cantidad_vehiculos' => 'Vehículos',
+        'cantidad_vehiculos'   => 'Vehículos',
         'peso'                 => 'Peso (kg)',
         'valor_flete'          => 'Flete',
         'observaciones'        => 'Observaciones',
@@ -127,40 +120,6 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
 </section>
 
 <div class="dos-columnas">
-    <section class="tarjeta">
-        <h2>Remesa <span class="chip chip--rndc"><?= e($remesa['estado_rndc'] ?? '—') ?></span></h2>
-        <?php fichaCampos($remesa, [
-            'num_remesa'           => 'Consecutivo remesa',
-            'naturaleza_carga'     => 'Naturaleza carga',
-            'tipo_empaque'         => 'Tipo empaque',
-            'mercancia_codigo'     => 'Cód. mercancía',
-            'descripcion_producto' => 'Producto',
-            'cantidad_cargada'     => 'Cantidad cargada',
-            'codigo_un'            => 'Código UN',
-            'estado_producto'      => 'Estado del producto',
-            'municipio_cargue'     => 'Mun. cargue',
-            'municipio_descargue'  => 'Mun. descargue',
-            'remitente_num_id'     => 'Remitente',
-            'destinatario_num_id'  => 'Destinatario',
-            'propietario_num_id'   => 'Propietario carga',
-            'fecha_cita_cargue'    => 'Cita cargue',
-            'fecha_cita_descargue' => 'Cita descargue',
-            'rndc_ingreso_id'      => 'Ingreso RNDC',
-        ], [
-            'naturaleza_carga'    => $__fmtNatu,
-            'tipo_empaque'        => $__fmtEmpaque,
-            'mercancia_codigo'    => $__fmtProducto,
-            'estado_producto'     => static fn ($v) => e((['L'=>'Líquido','S'=>'Sólido/semi-sólido','G'=>'Gaseoso'][(string) $v] ?? $v ?: '—')),
-            'municipio_cargue'    => $__fmtMuni,
-            'municipio_descargue' => $__fmtMuni,
-            'remitente_num_id'    => $__fmtTercCol('remitente_tipo_id'),
-            'destinatario_num_id' => $__fmtTercCol('destinatario_tipo_id'),
-            'propietario_num_id'  => $__fmtTercCol('propietario_tipo_id'),
-            'fecha_cita_cargue'   => static fn ($v, $f) => ($__fmtCita)($v, $f, 'hora_cita_cargue'),
-            'fecha_cita_descargue' => static fn ($v, $f) => ($__fmtCita)($v, $f, 'hora_cita_descargue'),
-        ]); ?>
-    </section>
-
     <section class="tarjeta">
         <h2>Manifiesto <span class="chip chip--rndc"><?= e($manifiesto['estado_rndc'] ?? '—') ?></span></h2>
         <?php fichaCampos($manifiesto, [
@@ -189,10 +148,50 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
     </section>
 </div>
 
+<section class="tarjeta">
+    <h2>Remesas del despacho</h2>
+    <?php if (empty($remesas)): ?>
+        <p class="ayuda">No hay remesas generadas.</p>
+    <?php else: ?>
+        <div class="tabla-responsive">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Remesa</th>
+                        <th>Naturaleza</th>
+                        <th>Empaque</th>
+                        <th>Cód.</th>
+                        <th>Producto</th>
+                        <th>Peso (kg)</th>
+                        <th>Valor</th>
+                        <th>Estado RNDC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($remesas as $i => $r): ?>
+                        <tr>
+                            <td><?= $i + 1 ?></td>
+                            <td><?= e($r['num_remesa'] ?? '—') ?></td>
+                            <td><?= $__fmtNatu($r['naturaleza_carga']) ?></td>
+                            <td><?= $__fmtEmpaque($r['tipo_empaque']) ?></td>
+                            <td><?= e($r['mercancia_codigo'] ?? '—') ?></td>
+                            <td><?= e($r['descripcion_producto'] ?? '—') ?></td>
+                            <td><?= e($r['peso'] ?? '—') ?></td>
+                            <td><?= e($r['valor_mercancia'] ?? '—') ?></td>
+                            <td><span class="chip chip--rndc"><?= e($r['estado_rndc']) ?></span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
+
 <div class="acciones">
-    <?php if ($remesa !== null && !empty($remesa['num_remesa'])): ?>
-        <a href="<?= e(ruta('remesa.pdf', ['remesa_id' => (int) $remesa['id']])) ?>" class="btn" target="_blank">🖨 Imprimir remesa</a>
-        <a href="<?= e(ruta('manifiesto.pdf', ['remesa_id' => (int) $remesa['id']])) ?>" class="btn" target="_blank">🖨 Imprimir manifiesto</a>
+    <?php if ($manifiesto !== null && !empty($manifiesto['id'])): ?>
+        <a href="<?= e(ruta('remesa.pdf', ['manifiesto_id' => (int) $manifiesto['id']])) ?>" class="btn" target="_blank">🖨 Imprimir remesas</a>
+        <a href="<?= e(ruta('manifiesto.pdf', ['manifiesto_id' => (int) $manifiesto['id']])) ?>" class="btn" target="_blank">🖨 Imprimir manifiesto</a>
     <?php endif; ?>
     <?php if (($solicitud['estado'] ?? '') === 'borrador'): ?>
         <a href="<?= e(ruta('despacho.confirmar', ['id' => (int) $solicitud['id']])) ?>" class="btn btn--primario">Confirmar despacho</a>
@@ -200,7 +199,7 @@ $__fmtProducto = static function (?string $v) use ($__cat): string {
     <?php elseif (($solicitud['estado'] ?? '') === 'procesada'): ?>
         <span class="chip chip--procesada">En cola de envío</span>
         <a href="<?= e(ruta('cola')) ?>" class="btn btn--primario">Ver cola RNDC</a>
-        <a href="<?= e(ruta('despacho.confirmar', ['id' => (int) $solicitud['id']])) ?>" class="btn">Reeditar despacho</a>
+        <a href="<?= e(ruta('despacho.confirmar', ['id' => (int) $solicitud['id']])) ?>" class="btn">Crear nuevo despacho</a>
     <?php elseif (($solicitud['estado'] ?? '') === 'despachada'): ?>
         <span class="chip chip--despachada">Despachada al RNDC</span>
         <a href="<?= e(ruta('cola')) ?>" class="btn">Ver cola RNDC</a>

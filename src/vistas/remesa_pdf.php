@@ -1,14 +1,16 @@
 <?php
 /**
- * Genera un PDF imprimible de la Remesa usando Dompdf.
+ * Genera un PDF imprimible de las Remesas usando Dompdf.
  *
- * Variables disponibles (inyectadas desde index.php):
- * @var array<string,mixed>      $remesa
- * @var array<string,mixed>      $solicitud
- * @var array<string,mixed>      $empresa
+ * Variables inyectadas desde index.php:
+ * @var list<array<string,mixed>> $remesas
+ * @var array<string,mixed>      $solicitud, $empresa
  * @var MunicipioRepo            $muni
- * @var array<string,mixed|null> $terceros   ['remitente','destinatario','generador']
- * @var string                   $natuNombre
+ * @var string                   $opNombre
+ * @var array<string,string>     $estadosProd
+ * @var array<string,string>     $empaqueMap
+ * @var callable                 $nomTerc, $fmtMuni, $terceroPorTipoNum
+ * @var array<string,string>     $nombresNat
  */
 declare(strict_types=1);
 
@@ -22,32 +24,8 @@ $options->set('defaultFont', 'Helvetica');
 $options->set('isHtml5ParserEnabled', true);
 $dompdf = new Dompdf($options);
 
-$r = $remesa;
 $s = $solicitud;
 $e = $empresa;
-
-$remitente    = $terceros['remitente'] ?? null;
-$destinatario = $terceros['destinatario'] ?? null;
-$generador    = $terceros['generador'] ?? null;
-
-$fmtMuni = static function (?string $cod) use ($muni): string {
-    if (!$cod) { return '—'; }
-    $nom = $muni->nombre($cod);
-    return e($nom ?: $cod);
-};
-
-$nomTerc = static function (?array $t): string {
-    if (!$t) { return '—'; }
-    return e(trim(($t['nombre'] ?? '') . ' ' . ($t['primer_apellido'] ?? '') . ' ' . ($t['segundo_apellido'] ?? '')) ?: ($t['nombre_completo'] ?? '—'));
-};
-
-$ops = ['G' => 'General', 'P' => 'Paqueteo', 'C' => 'Contenedor Cargado', 'V' => 'Contenedor Vacío'];
-$opNombre = $ops[$r['operacion_transporte'] ?? ''] ?? ($r['operacion_transporte'] ?? '—');
-
-$empaques = (new CatalogoRepo())->empaquePorCodigo($r['tipo_empaque'] ?? '') ?? ($r['tipo_empaque'] ?? '—');
-
-$estadosProd = ['L' => 'Líquido', 'S' => 'Sólido/semi-sólido', 'G' => 'Gaseoso'];
-$estadoMerc = $estadosProd[$r['estado_producto'] ?? ''] ?? ($r['estado_producto'] ?? '');
 
 $html = '<!DOCTYPE html>
 <html lang="es">
@@ -65,10 +43,24 @@ $html = '<!DOCTYPE html>
         .col-double td { width: 50%; border: none; padding: 0; vertical-align: top; }
         .col-double td:first-child { padding-right: 4px; }
         .col-double td:last-child { padding-left: 4px; }
+        .page-break { page-break-before: always; }
     </style>
 </head>
-<body>
+<body>';
 
+foreach ($remesas as $idx => $r) {
+    if ($idx > 0) {
+        $html .= '<div class="page-break"></div>';
+    }
+
+    $remitente    = $terceroPorTipoNum($r['remitente_tipo_id'] ?? '', $r['remitente_num_id'] ?? '');
+    $destinatario = $terceroPorTipoNum($r['destinatario_tipo_id'] ?? '', $r['destinatario_num_id'] ?? '');
+    $generador    = $terceroPorTipoNum($r['propietario_tipo_id'] ?? $s['generador_tipo_id'] ?? '', $r['propietario_num_id'] ?? $s['generador_num_id'] ?? '');
+    $natuNombre   = $nombresNat[$r['naturaleza_carga'] ?? ''] ?? '—';
+    $estadoMerc   = $estadosProd[$r['estado_producto'] ?? ''] ?? ($r['estado_producto'] ?? '');
+    $empaqueDesc  = $empaqueMap[$r['tipo_empaque'] ?? ''] ?? ($r['tipo_empaque'] ?? '—');
+
+    $html .= '
     <table class="w-100" style="border: none;">
         <tr style="border: none;">
             <td width="60%" style="border: none;">
@@ -78,7 +70,7 @@ $html = '<!DOCTYPE html>
             </td>
             <td width="40%" style="border: none;">
                 <div class="header-box">
-                    <strong style="font-size: 14px;">REMESA</strong><br>
+                    <strong style="font-size: 14px;">REMESA #' . ($idx + 1) . '</strong><br>
                     <strong>CONSECUTIVO REMESA:</strong> <span style="color: red; font-size: 12px;">' . e($r['num_remesa'] ?? '') . '</span><br>
                     <span style="font-size: 9px;">N&Uacute;MERO AUTORIZACI&Oacute;N: ' . e($r['rndc_ingreso_id'] ?? '—') . '</span>
                 </div>
@@ -89,7 +81,7 @@ $html = '<!DOCTYPE html>
     <table>
         <tr>
             <th>Tipo de Operaci&oacute;n:</th><td>' . e($opNombre) . '</td>
-            <th>Tipo de Empaque:</th><td>' . e($empaques) . '</td>
+            <th>Tipo de Empaque:</th><td>' . e($empaqueDesc) . '</td>
             <th>Orden de servicio generador:</th><td>' . e($s['consecutivo'] ?? '—') . '</td>
         </tr>
     </table>
@@ -190,8 +182,10 @@ $html = '<!DOCTYPE html>
         <tr>
             <td style="height: 35px; font-size: 11px;"><strong>' . e($s['observaciones'] ?? '') . '</strong></td>
         </tr>
-    </table>
+    </table>';
+}
 
+$html .= '
 </body>
 </html>';
 
@@ -199,4 +193,4 @@ $dompdf->loadHtml($html);
 $dompdf->setPaper('A4', 'portrait');
 $dompdf->render();
 
-$dompdf->stream('remesa_' . e($r['num_remesa'] ?? $remesaId) . '.pdf', ['Attachment' => false]);
+$dompdf->stream('remesas_' . e($s['consecutivo'] ?? 'solicitud') . '.pdf', ['Attachment' => false]);

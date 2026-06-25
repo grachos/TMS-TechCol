@@ -51,8 +51,8 @@ $estadosRndc = ['pendiente' => 'Pendiente', 'enviado' => 'Enviado', 'aceptado' =
                     <td><?= e($d['created_at'] ? date('Y-m-d', strtotime($d['created_at'])) : '—') ?></td>
                     <td><span class="chip chip--<?= e($d['estado_remesa']) ?>"><?= e($estadosRndc[$d['estado_remesa']] ?? $d['estado_remesa']) ?></span></td>
                     <td>
-                        <a href="<?= e(ruta('despacho.procesar', ['remesa_id' => $d['remesa_id']])) ?>" class="btn btn--small btn--primario">Procesar ahora</a>
-                        <a href="<?= e(ruta('solicitud.ver', ['id' => $d['solicitud_id'], 'remesa_id' => $d['remesa_id']])) ?>" class="btn btn--small">Ver</a>
+                        <a href="<?= e(ruta('despacho.procesar', ['manifiesto_id' => $d['manifiesto_id']])) ?>" class="btn btn--small btn--primario">Procesar ahora</a>
+                        <a href="<?= e(ruta('solicitud.ver', ['id' => $d['solicitud_id'], 'manifiesto_id' => $d['manifiesto_id']])) ?>" class="btn btn--small">Ver</a>
                     </td>
                 </tr>
             <?php endforeach; ?>

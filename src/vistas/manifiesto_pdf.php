@@ -3,14 +3,15 @@
  * Genera un PDF imprimible del Manifiesto usando Dompdf.
  *
  * Variables inyectadas desde index.php:
- * @var array<string,mixed>      $remesa, $manifiesto, $solicitud, $vehiculo, $empresa
+ * @var list<array<string,mixed>> $remesas
+ * @var array<string,mixed>      $manifiesto, $solicitud, $vehiculo, $empresa
  * @var MunicipioRepo            $muni
  * @var CatalogoRepo             $cat
- * @var string                   $natuNombre, $tipoManifiesto
+ * @var string                   $tipoManifiesto
  * @var array                    $responsables
  * @var array<string,mixed>|null $titular, $conductor, $remitente, $destinatario, $generador
  * @var string                   $empaqueDesc
- * @var callable                 $nomTerc, $fmtMuni
+ * @var callable                 $nomTerc, $fmtMuni, $terceroPorTipoNum
  */
 declare(strict_types=1);
 
@@ -29,10 +30,13 @@ $options->set('isRemoteEnabled', true);
 $dompdf = new Dompdf($options);
 
 $m = $manifiesto;
-$r = $remesa;
+$r0 = $remesas[0] ?? [];
 $s = $solicitud;
 $v = $vehiculo;
 $e = $empresa;
+
+$nombresNat = ['1' => 'NORMAL', '2' => 'PELIGROSA', '3' => 'EXTRADIMENSIONADA',
+               '4' => 'EXTRAPESADA', '5' => 'DESECHO PELIGROSO', '6' => 'SEMOVIENTES', '7' => 'REFRIGERADA'];
 
 $configDsc = '';
 if (!empty($v['cod_configuracion'])) {
@@ -69,7 +73,7 @@ if ($autorizacionNum) {
     $configQr  = $v['cod_configuracion'] ?? '';
     $origQr    = mb_substr($origen, 0, 20);
     $destQr    = mb_substr($destino, 0, 20);
-    $mercanciaQr = mb_substr($r['descripcion_producto'] ?? '', 0, 30);
+    $mercanciaQr = mb_substr($r0['descripcion_producto'] ?? '', 0, 30);
     $condQr    = $m['conductor_num_id'] ?? '';
     $empresaQr = mb_substr($e['razon_social'] ?? '', 0, 30);
     $obsQr     = mb_substr($s['observaciones'] ?? '', 0, 120);
@@ -114,6 +118,31 @@ foreach ($rows as $row) {
     $qrImageHtml .= '</tr>';
 }
 $qrImageHtml .= '</table></div>';
+}
+
+// Build remesas rows.
+$remesasRows = '';
+foreach ($remesas as $rem) {
+    $__natu = $nombresNat[$rem['naturaleza_carga'] ?? ''] ?? '—';
+    $__empq = $cat->empaquePorCodigo($rem['tipo_empaque'] ?? '') ?? ($rem['tipo_empaque'] ?? '—');
+    $__remt = $terceroPorTipoNum($rem['remitente_tipo_id'] ?? '', $rem['remitente_num_id'] ?? '');
+    $__dest = $terceroPorTipoNum($rem['destinatario_tipo_id'] ?? '', $rem['destinatario_num_id'] ?? '');
+    $__duenoP = $rem['dueno_poliza'] ?? '—';
+    $__genT = $rem['propietario_tipo_id'] ?? $s['generador_tipo_id'] ?? null;
+    $__genN = $rem['propietario_num_id'] ?? $s['generador_num_id'] ?? null;
+    $__gen  = ($__genT && $__genN) ? $terceroPorTipoNum($__genT, $__genN) : null;
+    $remesasRows .=
+        '<tr>'
+        . '<td>' . e($rem['num_remesa'] ?? '—') . '</td>'
+        . '<td>' . e((string) ($rem['peso'] ?? '—')) . ' ' . e($rem['unidad_medida'] ?? 'Kg') . '</td>'
+        . '<td>' . e($__natu) . ' / ' . e($__empq) . '</td>'
+        . '<td>' . e($rem['descripcion_producto'] ?? '—') . '</td>'
+        . '<td>' . e($nomTerc($__remt)) . '<br><strong>NIT:</strong> ' . e(($__remt['tipo_id'] ?? '') . ' ' . ($__remt['num_id'] ?? '—')) . '</td>'
+        . '<td>' . e($nomTerc($__dest)) . '<br><strong>NIT:</strong> ' . e(($__dest['tipo_id'] ?? '') . ' ' . ($__dest['num_id'] ?? '—')) . '</td>'
+        . '</tr>'
+        . '<tr>'
+        . '<td colspan="6"><strong>Due&ntilde;o P&oacute;liza Carga:</strong> ' . e($__duenoP) . ' &nbsp;|&nbsp; <strong>Generador:</strong> ' . e($nomTerc($__gen)) . '</td>'
+        . '</tr>';
 }
 
 $html = '<!DOCTYPE html>
@@ -219,17 +248,7 @@ $html = '<!DOCTYPE html>
             </tr>
         </thead>
         <tbody>
-            <tr>
-                <td>' . e($r['num_remesa'] ?? '—') . '</td>
-                <td>' . e((string) ($r['peso'] ?? '—')) . ' ' . e($r['unidad_medida'] ?? 'Kg') . '</td>
-                <td>' . e($natuNombre) . ' / ' . e($empaqueDesc) . '</td>
-                <td>' . e($r['descripcion_producto'] ?? '—') . '</td>
-                <td>' . e($nomTerc($remitente)) . '<br><strong>NIT:</strong> ' . e(($remitente['tipo_id'] ?? '') . ' ' . ($remitente['num_id'] ?? '—')) . '</td>
-                <td>' . e($nomTerc($destinatario)) . '<br><strong>NIT:</strong> ' . e(($destinatario['tipo_id'] ?? '') . ' ' . ($destinatario['num_id'] ?? '—')) . '</td>
-            </tr>
-            <tr>
-                <td colspan="6"><strong>Due&ntilde;o P&oacute;liza Carga:</strong> ' . e($r['dueno_poliza'] ?? '—') . ' &nbsp;|&nbsp; <strong>Generador:</strong> ' . e($nomTerc($generador)) . '</td>
-            </tr>
+            ' . $remesasRows . '
         </tbody>
     </table>
 
@@ -268,4 +287,4 @@ $dompdf->loadHtml($html);
 $dompdf->setPaper('A4', 'portrait');
 $dompdf->render();
 
-$dompdf->stream('manifiesto_' . e($m['num_manifiesto'] ?? $remesaId) . '.pdf', ['Attachment' => false]);
+$dompdf->stream('manifiesto_' . e($m['num_manifiesto'] ?? $manifiestoId) . '.pdf', ['Attachment' => false]);

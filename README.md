@@ -53,16 +53,16 @@ light-tms/
 │   ├── municipios.sql       DIVIPOLA
 │   ├── maestros.sql         tercero + vehículo
 │   ├── catalogo_configuracion.sql  configuraciones de unidad de carga
-│   └── migracion_v*.sql     migraciones incrementales (v2–v24)
+│   └── migracion_v*.sql     migraciones incrementales (v2–v29)
 ├── .env.example
 └── README.md
 ```
 
 ## Modelo de datos
 
-- `solicitud_servicio` — captura única (siembra manifiesto + remesa)
-- `manifiesto` — documento RNDC (ManifiestoCarga)
-- `remesa` — documento RNDC (RemesaTerrestreCarga)
+- `solicitud_servicio` — captura única (siembra manifiesto + remesas)
+- `manifiesto` — documento RNDC (ManifiestoCarga), uno por despacho
+- `remesa` — documento RNDC (RemesaTerrestreCarga), N por manifiesto vía `manifiesto_remesa`
 - `cola_envios` — bandeja store-and-forward (estado: pendiente / enviando / enviado / error)
 
 Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corchetes]`.
@@ -103,8 +103,11 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
     | 27 | `migracion_v22.sql` | Agrega `emf` (NIT Empresa Monitoreo Flota) a maestro_empresa, solicitud_servicio y manifiesto. |
     | 28 | `migracion_v23.sql` | Agrega `codigo_un` + `estado_producto` a producto, solicitud_servicio y remesa para mercancía peligrosa. |
     | 29 | `migracion_v24.sql` | Agrega `remesa_id` a cola_envios para procesar despachos individualmente. |
-    | 30 | `migracion_v25.sql` | Agrega `remesa_id` a manifiesto para vincular remesa ↔ manifiesto. |
-    | 31 | `migracion_v26.sql` | Elimina `codigo_un` y `estado_producto` de solicitud_servicio (se heredan de producto). |
+| 30 | `migracion_v25.sql` | Agrega `remesa_id` a manifiesto para vincular remesa ↔ manifiesto. |
+| 31 | `migracion_v26.sql` | Elimina `codigo_un` y `estado_producto` de solicitud_servicio (se heredan de producto). |
+| 32 | `migracion_v27.sql` | Agrega `seguridadqr` a manifiesto; se consulta tras aceptación RNDC. |
+| 33 | `migracion_v28.sql` | Crea `manifiesto_remesa` (1:N remesa↔manifiesto), agrega `valor_mercancia` a remesa, `manifiesto_id` a cola_envios. |
+| 34 | `migracion_v29.sql` | Back-fill de `cola_envios.manifiesto_id` para filas existentes. |
 
    > La migración v12 reemplaza la tabla `producto` completa. Después de ejecutarla,
    > corre el script `importar_productos_csv.php` para poblar los 3758 productos desde
@@ -187,6 +190,24 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
   - Tablas con scroll horizontal en pantallas muy angostas
   - Formularios, fichas, contadores y filtros se apilan verticalmente en móvil
   - Desplegables navegables por clic en lugar de hover en dispositivos táctiles
+- [x] **QR code local (v27):**
+  - Reemplazada API de Google Charts por `chillerlan/php-qrcode` v6.0.1
+  - QR renderizado como HTML `<table>` con celdas de 0.81 mm (matriz 37×37 = 3 cm)
+  - Texto estructurado RNDC con 12 campos (MEC, Fecha, Placa, etc.) separados por `\r\n`
+  - Margen blanco de 2 mm vía `padding:2mm`
+  - Código `seguridadqr` se consulta al RNDC tras aceptar el manifiesto (tipo=3, procesoid=4)
+- [x] **Multi-remesa por manifiesto (v28):**
+  - Relación 1:N vía tabla `manifiesto_remesa`
+  - `confirmarDespacho()` crea un manifiesto + N remesas desde `$datos['remesas']`
+  - Cada remesa tiene su propio producto, terceros (remitente/destinatario/generador editables), citas de cargue/descargue y valor de mercancía
+  - Formulario de despacho con editor dinámico (JS add/remove remesas)
+  - Cola de envíos: se encolan N remesas + 1 manifiesto por despacho
+  - Payload XML del manifiesto itera `manifiesto_remesa` para construir `<REMESASMAN>` con múltiples `<REMESA>`
+  - PDF de remesas combinado (con page-break entre cada una) o PDF de manifiesto con tabla de todas las remesas
+- [x] **Cola de envíos usa `manifiesto_id`:**
+  - `cola_envios` ahora referencias `manifiesto_id` en lugar de `remesa_id`
+  - `procesarDespacho()` filtra por manifiesto
+  - Listado de despachos consulta vía `manifiesto_remesa`
 
 > El cliente RNDC (`src/Rndc/RndcClient.php`) está verificado de extremo a extremo
 > contra el servidor real del RNDC con credenciales válidas en `.env`.
@@ -194,19 +215,22 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
 ### Fase 4 — Despacho y cola
 
 1. Una solicitud en `borrador` se **confirma** (botón *Confirmar despacho*): se
-   completan vehículo, conductor, propietario de la carga, citas/tiempos de
-   cargue-descargue y responsables de pago.
-2. Al confirmar se re-siembran remesa y manifiesto completos y se **encolan** en
-   orden: tercero (11) → vehículo (12) → remesa (3) → manifiesto (4).
-3. El **worker** (`cron/retry_worker.php`, o el botón *Procesar ahora* en la
+   completan vehículo, conductor, responsables de pago y las **remesas** del despacho.
+2. Cada remesa puede tener su propio producto, terceros (remitente/destinatario/generador)
+   y citas de cargue/descargue. Se pueden agregar/eliminar remesas dinámicamente.
+3. Al confirmar se siembran N remesas + 1 manifiesto completos y se **encolan** en
+   orden: tercero (11) → vehículo (12) → remesas (3) → manifiesto (4).
+4. El **worker** (`cron/retry_worker.php`, o el botón *Procesar ahora* en la
    pantalla **Cola RNDC**) drena la cola con reintentos y backoff. Cuando el
    manifiesto es aceptado, la solicitud pasa a `despachada`.
-4. **Interruptor de seguridad** `COLA_ENVIO_HABILITADO` (en `.env`):
+5. **Interruptor de seguridad** `COLA_ENVIO_HABILITADO` (en `.env`):
    - `false` (por defecto) → *modo seguro*: arma y previsualiza el XML pero **no**
      lo envía. Útil para revisar el XML antes de escribir en el RNDC.
    - `true` → envío real al RNDC (según `RNDC_AMBIENTE`).
-5. Cuando un envío falla, la vista `cola.xml` muestra **el XML enviado** junto con
+6. Cuando un envío falla, la vista `cola.xml` muestra **el XML enviado** junto con
    la respuesta de error del RNDC, facilitando la depuración.
+7. Tras la aceptación del manifiesto, se consulta automáticamente el `seguridadqr`
+   ante el RNDC y se almacena para incluirlo en el QR del PDF impreso.
 
 ### Consecutivos automáticos
 

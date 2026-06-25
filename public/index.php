@@ -321,9 +321,9 @@ try {
 
         case 'solicitud.ver':
             $id = (int) ($_GET['id'] ?? 0);
-            $remesaId = isset($_GET['remesa_id']) ? (int) $_GET['remesa_id'] : null;
+            $manifiestoId = isset($_GET['manifiesto_id']) ? (int) $_GET['manifiesto_id'] : null;
             $repo = new SolicitudRepo();
-            $datos = $repo->obtener($id, $remesaId);
+            $datos = $repo->obtener($id, $manifiestoId);
             if ($datos === null) {
                 http_response_code(404);
                 layout_top('No encontrada', 'solicitudes');
@@ -333,7 +333,7 @@ try {
             }
             $solicitud  = $datos['solicitud'];
             $manifiesto = $datos['manifiesto'];
-            $remesa     = $datos['remesa'];
+            $remesas    = $datos['remesas'];
             layout_top('Solicitud #' . $id, 'solicitudes');
             require __DIR__ . '/../src/vistas/solicitud_detalle.php';
             layout_bottom();
@@ -341,20 +341,22 @@ try {
 
         case 'despacho.confirmar':
             $id = (int) ($_GET['id'] ?? 0);
-            $datos = (new SolicitudRepo())->obtener($id);
-            if ($datos === null) {
+            $repo = new SolicitudRepo();
+            $dd = $repo->obtener($id);
+            if ($dd === null) {
                 header('Location: ' . ruta('solicitudes', ['err' => 'Solicitud no encontrada.']));
                 break;
             }
-            if ($datos['solicitud']['estado'] === 'despachada') {
+            if ($dd['solicitud']['estado'] === 'despachada') {
                 header('Location: ' . ruta('solicitud.ver', ['id' => $id, 'err' => 'La solicitud ya fue despachada.']));
                 break;
             }
-            if (($datos['solicitud']['cantidad_vehiculos'] ?? 1) < 1) {
+            if (($dd['solicitud']['cantidad_vehiculos'] ?? 1) < 1) {
                 header('Location: ' . ruta('solicitud.ver', ['id' => $id, 'err' => 'Ya no quedan vehículos por despachar en esta solicitud.']));
                 break;
             }
-            $solicitud = $datos['solicitud'];
+            $solicitud = $dd['solicitud'];
+            $remesas   = $dd['remesas'];
             if (empty($solicitud['emf'])) {
                 $empresa = (new EmpresaRepo())->obtener();
                 $solicitud['emf'] = $empresa['emf'] ?? '';
@@ -448,9 +450,9 @@ try {
             break;
 
         case 'despacho.procesar':
-            $remesaId = (int) ($_GET['remesa_id'] ?? 0);
+            $manifiestoId = (int) ($_GET['manifiesto_id'] ?? 0);
             try {
-                $r2 = (new ColaRepo())->procesarDespacho($remesaId);
+                $r2 = (new ColaRepo())->procesarDespacho($manifiestoId);
                 $msg = $r2['ok'] ? 'ok' : 'err';
                 header('Location: ' . ruta('despachos', [$msg => $r2['mensaje']]));
             } catch (Throwable $e) {
@@ -474,13 +476,21 @@ try {
             break;
 
         case 'remesa.pdf':
-            $remesaId = (int) ($_GET['remesa_id'] ?? 0);
-            if (!$remesaId) { http_response_code(400); echo 'Falta remesa_id'; break; }
+            $manifiestoId = (int) ($_GET['manifiesto_id'] ?? 0);
+            if (!$manifiestoId) { http_response_code(400); echo 'Falta manifiesto_id'; break; }
 
-            $r = db()->prepare('SELECT * FROM remesa WHERE id = ?');
-            $r->execute([$remesaId]);
-            $remesa = $r->fetch();
-            if (!$remesa) { http_response_code(404); echo 'Remesa no encontrada'; break; }
+            $remesas = db()->prepare(
+                'SELECT r.* FROM remesa r
+                 JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+                 WHERE mr.manifiesto_id = ?
+                 ORDER BY r.id'
+            );
+            $remesas->execute([$manifiestoId]);
+            $remesas = $remesas->fetchAll();
+            if (empty($remesas)) { http_response_code(404); echo 'No hay remesas asociadas'; break; }
+
+            // Usar la primera remesa para datos compartidos.
+            $remesa = $remesas[0];
 
             $s = db()->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
             $s->execute([$remesa['solicitud_id']]);
@@ -490,45 +500,60 @@ try {
 
             $muni = new MunicipioRepo();
 
-            $terceros = [];
-            foreach (['remitente', 'destinatario', 'generador'] as $role) {
-                $colTipo = $role . '_tipo_id';
-                $colNum  = $role . '_num_id';
-                $tid = $remesa[$colTipo] ?? $solicitud[$colTipo] ?? null;
-                $nid = $remesa[$colNum] ?? $solicitud[$colNum] ?? null;
-                if ($tid && $nid) {
-                    $q = db()->prepare('SELECT * FROM tercero WHERE tipo_id = ? AND num_id = ?');
-                    $q->execute([$tid, $nid]);
-                    $terceros[$role] = $q->fetch();
-                } else {
-                    $terceros[$role] = null;
-                }
-            }
-
             $nombresNat = ['1' => 'NORMAL', '2' => 'PELIGROSA', '3' => 'EXTRADIMENSIONADA',
                            '4' => 'EXTRAPESADA', '5' => 'DESECHO PELIGROSO', '6' => 'SEMOVIENTES', '7' => 'REFRIGERADA'];
 
-            $natuNombre = $nombresNat[$remesa['naturaleza_carga'] ?? ''] ?? '—';
+            $terceroPorTipoNum = static function (string $tipo, string $num): ?array {
+                $q = db()->prepare('SELECT * FROM tercero WHERE tipo_id = ? AND num_id = ?');
+                $q->execute([$tipo, $num]);
+                return $q->fetch() ?: null;
+            };
+
+            $nomTerc = static function (?array $t): string {
+                if (!$t) { return '—'; }
+                return trim(($t['nombre'] ?? '') . ' ' . ($t['primer_apellido'] ?? '') . ' ' . ($t['segundo_apellido'] ?? '')) ?: ($t['nombre_completo'] ?? '—');
+            };
+
+            $fmtMuni = static function (?string $cod) use ($muni): string {
+                if (!$cod) { return '—'; }
+                $nom = $muni->nombre($cod);
+                return $nom ?: $cod;
+            };
+
+            $ops = ['G' => 'General', 'P' => 'Paqueteo', 'C' => 'Contenedor Cargado', 'V' => 'Contenedor Vacío'];
+            $opNombre = $ops[$remesa['operacion_transporte'] ?? ''] ?? ($remesa['operacion_transporte'] ?? '—');
+
+            $estadosProd = ['L' => 'Líquido', 'S' => 'Sólido/semi-sólido', 'G' => 'Gaseoso'];
+
+            $empaquesList = (new CatalogoRepo())->empaques();
+            $empaqueMap = [];
+            foreach ($empaquesList as $emp) { $empaqueMap[$emp['codigo']] = $emp['codigo'] . ' - ' . $emp['descripcion']; }
 
             require __DIR__ . '/../src/vistas/remesa_pdf.php';
             break;
 
         case 'manifiesto.pdf':
-            $remesaId = (int) ($_GET['remesa_id'] ?? 0);
-            if (!$remesaId) { http_response_code(400); echo 'Falta remesa_id'; break; }
+            $manifiestoId = (int) ($_GET['manifiesto_id'] ?? 0);
+            if (!$manifiestoId) { http_response_code(400); echo 'Falta manifiesto_id'; break; }
 
-            $rr = db()->prepare('SELECT * FROM remesa WHERE id = ?');
-            $rr->execute([$remesaId]);
-            $remesa = $rr->fetch();
-            if (!$remesa) { http_response_code(404); echo 'Remesa no encontrada'; break; }
-
-            $mm = db()->prepare('SELECT * FROM manifiesto WHERE remesa_id = ?');
-            $mm->execute([$remesaId]);
+            $mm = db()->prepare('SELECT * FROM manifiesto WHERE id = ?');
+            $mm->execute([$manifiestoId]);
             $manifiesto = $mm->fetch();
             if (!$manifiesto) { http_response_code(404); echo 'Manifiesto no encontrado'; break; }
 
+            $remesas = db()->prepare(
+                'SELECT r.* FROM remesa r
+                 JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+                 WHERE mr.manifiesto_id = ?
+                 ORDER BY r.id'
+            );
+            $remesas->execute([$manifiestoId]);
+            $remesas = $remesas->fetchAll();
+            $remesa = $remesas[0] ?? [];
+            if (empty($remesas)) { http_response_code(404); echo 'No hay remesas asociadas'; break; }
+
             $ss = db()->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
-            $ss->execute([$remesa['solicitud_id']]);
+            $ss->execute([$manifiesto['solicitud_id']]);
             $solicitud = $ss->fetch() ?: [];
 
             $vv = db()->prepare('SELECT * FROM vehiculo WHERE placa = ?');
@@ -541,7 +566,6 @@ try {
 
             $nombresNat = ['1' => 'NORMAL', '2' => 'PELIGROSA', '3' => 'EXTRADIMENSIONADA',
                            '4' => 'EXTRAPESADA', '5' => 'DESECHO PELIGROSO', '6' => 'SEMOVIENTES', '7' => 'REFRIGERADA'];
-            $natuNombre = $nombresNat[$remesa['naturaleza_carga'] ?? ''] ?? '—';
 
             $ops = ['G' => 'GENERAL', 'P' => 'PAQUETEO', 'C' => 'CONTENEDOR CARGADO', 'V' => 'CONTENEDOR VACÍO'];
             $tipoManifiesto = $ops[$manifiesto['operacion_transporte'] ?? ''] ?? ($manifiesto['operacion_transporte'] ?? '—');
@@ -559,6 +583,12 @@ try {
                 return trim(($t['nombre'] ?? '') . ' ' . ($t['primer_apellido'] ?? '') . ' ' . ($t['segundo_apellido'] ?? '')) ?: ($t['nombre_completo'] ?? '—');
             };
 
+            $fmtMuni = static function (?string $cod) use ($muni): string {
+                if (!$cod) { return '—'; }
+                $nom = $muni->nombre($cod);
+                return $nom ?: $cod;
+            };
+
             $titular = $terceroPorTipoNum($manifiesto['titular_tipo_id'] ?? '', $manifiesto['titular_num_id'] ?? '');
             $conductor = $terceroPorTipoNum($manifiesto['conductor_tipo_id'] ?? '', $manifiesto['conductor_num_id'] ?? '');
             $remitente = $terceroPorTipoNum($remesa['remitente_tipo_id'] ?? '', $remesa['remitente_num_id'] ?? '');
@@ -571,12 +601,6 @@ try {
             }
 
             $empaqueDesc = $cat->empaquePorCodigo($remesa['tipo_empaque'] ?? '') ?? ($remesa['tipo_empaque'] ?? '—');
-
-            $fmtMuni = static function (?string $cod) use ($muni): string {
-                if (!$cod) { return '—'; }
-                $nom = $muni->nombre($cod);
-                return $nom ?: $cod;
-            };
 
             require __DIR__ . '/../src/vistas/manifiesto_pdf.php';
             break;

@@ -23,10 +23,6 @@ final class SolicitudRepo
     private const CAMPOS_DESPACHO = [
         'placa_vehiculo',
         'conductor_tipo_id', 'conductor_num_id',
-        'fecha_cita_cargue', 'hora_cita_cargue',
-        'fecha_cita_descargue', 'hora_cita_descargue',
-        'horas_pacto_cargue', 'minutos_pacto_cargue',
-        'horas_pacto_descargue', 'minutos_pacto_descargue',
         'responsable_pago_cargue', 'responsable_pago_descargue',
         'emf',
     ];
@@ -148,7 +144,8 @@ final class SolicitudRepo
     /**
      * Confirma el despacho de una solicitud: guarda los datos diferidos
      * (vehículo, conductor, propietario de carga, citas, responsables de pago),
-     * re-siembra remesa + manifiesto ya completos, marca la solicitud como
+     * crea UN manifiesto y N remesas (una por producto), las vincula mediante
+     * la tabla intermedia manifiesto_remesa, marca la solicitud como
      * 'procesada' y encola los documentos para su envío al RNDC.
      *
      * @param array<string,mixed> $datos
@@ -177,21 +174,49 @@ final class SolicitudRepo
             $fila['id'] = $id;
             $pdo->prepare("UPDATE solicitud_servicio SET $sets WHERE id = :id")->execute($fila);
 
-            // 2) Leer solicitud completa y sembrar nueva remesa + manifiesto
-            //    con los consecutivos de la empresa.
+            // 2) Leer solicitud completa para alimentar remesas y manifiesto.
             $stmt = $pdo->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
             $stmt->execute([$id]);
             $s = $stmt->fetch();
             $s['valor_anticipo'] = $datos['valor_anticipo'] ?? null;
             $s['cantidad_vehiculos'] = $nuevosRestantes;
-            $s['num_remesa'] = (new EmpresaRepo())->siguienteRemesa();
-            $s['num_manifiesto'] = (new EmpresaRepo())->siguienteManifiesto();
 
-            $remesaId = $this->sembrarRemesa($pdo, $id, $s);
-            $this->sembrarManifiesto($pdo, $id, $s, $remesaId);
+            // Consecutivos de empresa.
+            $empresaRepo = new EmpresaRepo();
+            $s['num_manifiesto'] = $empresaRepo->siguienteManifiesto();
 
-            // 3) Encolar tercero(11) → vehículo(12) → remesa(3) → manifiesto(4).
-            (new ColaRepo())->encolar($pdo, $id);
+            // 3) Crear el manifiesto (uno por despacho).
+            $manifiestoId = $this->sembrarManifiesto($pdo, $id, $s);
+
+            // 4) Obtener remesas desde POST (o una por defecto desde la solicitud).
+            $remesasData = $datos['remesas'] ?? [];
+            if (empty($remesasData) || !is_array($remesasData)) {
+                // Fallback: una remesa con los datos de la solicitud.
+                $remesasData = [[
+                    'naturaleza_carga'     => $s['naturaleza_carga'] ?? null,
+                    'tipo_empaque'         => $s['tipo_empaque'] ?? null,
+                    'mercancia_codigo'     => $s['mercancia_codigo'] ?? null,
+                    'descripcion_producto' => $s['descripcion_producto'] ?? null,
+                    'unidad_medida'        => $s['unidad_medida'] ?? null,
+                    'peso'                 => $s['peso'] ?? null,
+                    'valor_mercancia'      => $datos['valor_mercancia'] ?? $s['valor_mercancia'] ?? null,
+                ]];
+            }
+
+            $remesaIds = [];
+            foreach ($remesasData as $rd) {
+                $rd['num_remesa'] = $empresaRepo->siguienteRemesa();
+                $remesaIds[] = $this->sembrarRemesa($pdo, $id, $rd, $s);
+            }
+
+            // 5) Vincular remesas al manifiesto.
+            $linkStmt = $pdo->prepare('INSERT INTO manifiesto_remesa (manifiesto_id, remesa_id) VALUES (?, ?)');
+            foreach ($remesaIds as $rid) {
+                $linkStmt->execute([$manifiestoId, $rid]);
+            }
+
+            // 6) Encolar tercero(11) → vehículo(12) → remesas(3) → manifiesto(4).
+            (new ColaRepo())->encolar($pdo, $id, $manifiestoId, $remesaIds);
 
             $pdo->commit();
         } catch (Throwable $e) {
@@ -200,15 +225,18 @@ final class SolicitudRepo
         }
     }
 
-    /** @param array<string,mixed> $s */
-    private function sembrarRemesa(PDO $pdo, int $solicitudId, array $s): int
+    /**
+     * @param array<string,mixed> $rd datos de la remesa (producto)
+     * @param array<string,mixed> $s  solicitud (datos generales)
+     */
+    private function sembrarRemesa(PDO $pdo, int $solicitudId, array $rd, array $s): int
     {
         // Heredar codigo_un y estado_producto del producto cuando sea peligrosa.
         $codigoUn = null;
         $estadoProducto = null;
-        if (!empty($s['mercancia_codigo'])) {
+        if (!empty($rd['mercancia_codigo'])) {
             $prod = db()->prepare('SELECT codigo_un, estado_producto FROM producto WHERE codigo = ?');
-            $prod->execute([$s['mercancia_codigo']]);
+            $prod->execute([$rd['mercancia_codigo']]);
             $p = $prod->fetch();
             if ($p) {
                 $codigoUn = $p['codigo_un'] ?: null;
@@ -217,32 +245,32 @@ final class SolicitudRepo
         }
         $remesa = [
             'solicitud_id'         => $solicitudId,
-            'num_remesa'           => $s['num_remesa'] ?? null,
+            'num_remesa'           => $rd['num_remesa'] ?? null,
             'operacion_transporte' => $s['operacion_transporte'] ?? null,
-            'naturaleza_carga'     => $s['naturaleza_carga'] ?? null,
-            'tipo_empaque'         => $s['tipo_empaque'] ?? null,
-            'mercancia_codigo'     => $s['mercancia_codigo'] ?? null,
-            'descripcion_producto' => $s['descripcion_producto'] ?? null,
-            'cantidad_cargada'     => 1, // 1 vehículo por despacho
-            'unidad_medida'        => $s['unidad_medida'] ?? null,
-            'peso'                 => $s['peso'] ?? null,
-            'remitente_tipo_id'    => $s['remitente_tipo_id'] ?? null,
-            'remitente_num_id'     => $s['remitente_num_id'] ?? null,
-            'destinatario_tipo_id' => $s['destinatario_tipo_id'] ?? null,
-            'destinatario_num_id'  => $s['destinatario_num_id'] ?? null,
+            'naturaleza_carga'     => $rd['naturaleza_carga'] ?? null,
+            'tipo_empaque'         => $rd['tipo_empaque'] ?? null,
+            'mercancia_codigo'     => $rd['mercancia_codigo'] ?? null,
+            'descripcion_producto' => $rd['descripcion_producto'] ?? null,
+            'cantidad_cargada'     => 1,
+            'unidad_medida'        => $rd['unidad_medida'] ?? null,
+            'peso'                 => $rd['peso'] ?? null,
+            'valor_mercancia'      => $rd['valor_mercancia'] ?? null,
+            'remitente_tipo_id'    => $rd['remitente_tipo_id'] ?? $s['remitente_tipo_id'] ?? null,
+            'remitente_num_id'     => $rd['remitente_num_id'] ?? $s['remitente_num_id'] ?? null,
+            'destinatario_tipo_id' => $rd['destinatario_tipo_id'] ?? $s['destinatario_tipo_id'] ?? null,
+            'destinatario_num_id'  => $rd['destinatario_num_id'] ?? $s['destinatario_num_id'] ?? null,
             'municipio_cargue'     => $s['municipio_origen'] ?? null,
             'municipio_descargue'  => $s['municipio_destino'] ?? null,
-            // Datos completados al confirmar el despacho (Fase 4):
-            'propietario_tipo_id'    => $s['generador_tipo_id'] ?? null,
-            'propietario_num_id'     => $s['generador_num_id'] ?? null,
-            'fecha_cita_cargue'      => $s['fecha_cita_cargue'] ?? null,
-            'hora_cita_cargue'       => $s['hora_cita_cargue'] ?? null,
-            'fecha_cita_descargue'   => $s['fecha_cita_descargue'] ?? null,
-            'hora_cita_descargue'    => $s['hora_cita_descargue'] ?? null,
-            'horas_pacto_cargue'     => $s['horas_pacto_cargue'] ?? null,
-            'minutos_pacto_cargue'   => $s['minutos_pacto_cargue'] ?? null,
-            'horas_pacto_descargue'  => $s['horas_pacto_descargue'] ?? null,
-            'minutos_pacto_descargue' => $s['minutos_pacto_descargue'] ?? null,
+            'propietario_tipo_id'    => $rd['generador_tipo_id'] ?? $s['generador_tipo_id'] ?? null,
+            'propietario_num_id'     => $rd['generador_num_id'] ?? $s['generador_num_id'] ?? null,
+            'fecha_cita_cargue'      => $rd['fecha_cita_cargue'] ?? null,
+            'hora_cita_cargue'       => $rd['hora_cita_cargue'] ?? null,
+            'fecha_cita_descargue'   => $rd['fecha_cita_descargue'] ?? null,
+            'hora_cita_descargue'    => $rd['hora_cita_descargue'] ?? null,
+            'horas_pacto_cargue'     => $rd['horas_pacto_cargue'] ?? null,
+            'minutos_pacto_cargue'   => $rd['minutos_pacto_cargue'] ?? null,
+            'horas_pacto_descargue'  => $rd['horas_pacto_descargue'] ?? null,
+            'minutos_pacto_descargue' => $rd['minutos_pacto_descargue'] ?? null,
             'dueno_poliza'           => $s['dueno_poliza'] ?? 'N',
             'codigo_un'              => $codigoUn,
             'estado_producto'        => $estadoProducto,
@@ -252,13 +280,12 @@ final class SolicitudRepo
     }
 
     /** @param array<string,mixed> $s */
-    private function sembrarManifiesto(PDO $pdo, int $solicitudId, array $s, ?int $remesaId = null): void
+    private function sembrarManifiesto(PDO $pdo, int $solicitudId, array $s): int
     {
         $empresa = (new EmpresaRepo())->obtener();
         $poliza = $empresa['nro_poliza'] ?? null;
         $manifiesto = [
             'solicitud_id'         => $solicitudId,
-            'remesa_id'            => $remesaId,
             'num_manifiesto'       => $s['num_manifiesto'] ?? null,
             'fecha_expedicion'     => $s['fecha_solicitud'] ?? null,
             'operacion_transporte' => $s['operacion_transporte'] ?? null,
@@ -276,7 +303,6 @@ final class SolicitudRepo
             'fecha_pago_saldo'     => $s['fecha_pago_saldo'] ?? null,
             'nro_poliza'           => $poliza,
             'emf'                  => $s['emf'] ?? $empresa['emf'] ?? null,
-            // Datos completados al confirmar el despacho (Fase 4):
             'placa_vehiculo'           => $s['placa_vehiculo'] ?? null,
             'conductor_tipo_id'        => $s['conductor_tipo_id'] ?? null,
             'conductor_num_id'         => $s['conductor_num_id'] ?? null,
@@ -284,6 +310,7 @@ final class SolicitudRepo
             'responsable_pago_descargue' => $s['responsable_pago_descargue'] ?? null,
         ];
         $this->insertar($pdo, 'manifiesto', $manifiesto);
+        return (int) $pdo->lastInsertId();
     }
 
     /** @param array<string,mixed> $fila */
@@ -375,7 +402,7 @@ final class SolicitudRepo
     }
 
     /** @return array<string,mixed>|null */
-    public function obtener(int $id, ?int $remesaId = null): ?array
+    public function obtener(int $id, ?int $manifiestoId = null): ?array
     {
         $stmt = db()->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
         $stmt->execute([$id]);
@@ -384,22 +411,31 @@ final class SolicitudRepo
             return null;
         }
 
-        if ($remesaId !== null) {
-            $r = db()->prepare('SELECT * FROM remesa WHERE id = ? AND solicitud_id = ?');
-            $r->execute([$remesaId, $id]);
-            $m = db()->prepare('SELECT * FROM manifiesto WHERE remesa_id = ?');
-            $m->execute([$remesaId]);
+        if ($manifiestoId !== null) {
+            $m = db()->prepare('SELECT * FROM manifiesto WHERE id = ? AND solicitud_id = ?');
+            $m->execute([$manifiestoId, $id]);
         } else {
-            $r = db()->prepare('SELECT * FROM remesa WHERE solicitud_id = ?');
-            $r->execute([$id]);
             $m = db()->prepare('SELECT * FROM manifiesto WHERE solicitud_id = ?');
             $m->execute([$id]);
+        }
+        $manifiesto = $m->fetch() ?: null;
+
+        $remesas = [];
+        if ($manifiesto) {
+            $rs = db()->prepare(
+                'SELECT r.* FROM remesa r
+                 JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+                 WHERE mr.manifiesto_id = ?
+                 ORDER BY r.id'
+            );
+            $rs->execute([$manifiesto['id']]);
+            $remesas = $rs->fetchAll();
         }
 
         return [
             'solicitud'  => $solicitud,
-            'manifiesto' => $m->fetch() ?: null,
-            'remesa'     => $r->fetch() ?: null,
+            'manifiesto' => $manifiesto,
+            'remesas'    => $remesas,
         ];
     }
 

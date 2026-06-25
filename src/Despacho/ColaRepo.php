@@ -33,24 +33,25 @@ final class ColaRepo
 
     /**
      * Encola los documentos de una solicitud ya despachada.
-     * Cada despacho (multi-vehículo) añade su propia remesa+manifiesto
-     * sin afectar los ya encolados de despachos anteriores.
+     *
+     * @param int[] $remesaIds
      */
-    public function encolar(PDO $pdo, int $solicitudId): void
+    public function encolar(PDO $pdo, int $solicitudId, ?int $manifiestoId = null, array $remesaIds = []): void
     {
         $s = $this->fila($pdo, 'SELECT * FROM solicitud_servicio WHERE id = ?', [$solicitudId]);
-        // Obtener la ÚLTIMA remesa y manifiesto creados para este despacho.
-        $remesa = $this->fila($pdo, 'SELECT * FROM remesa WHERE solicitud_id = ? ORDER BY id DESC LIMIT 1', [$solicitudId]);
-        $manif  = $this->fila($pdo, 'SELECT * FROM manifiesto WHERE solicitud_id = ? ORDER BY id DESC LIMIT 1', [$solicitudId]);
-        if ($s === null || $remesa === null || $manif === null) {
-            throw new RuntimeException('No se puede encolar: faltan remesa o manifiesto.');
+        if ($s === null) {
+            throw new RuntimeException('Solicitud no encontrada para encolar.');
         }
-
-        $maxIntentos = (int) config()['cola']['max_intentos'];
+        if ($manifiestoId === null || empty($remesaIds)) {
+            throw new RuntimeException('Se requieren manifiestoId y remesaIds para encolar.');
+        }
+        $manif = $this->fila($pdo, 'SELECT * FROM manifiesto WHERE id = ?', [$manifiestoId]);
+        if ($manif === null) {
+            throw new RuntimeException('Manifiesto no encontrado.');
+        }
 
         // 1) Terceros referenciados que existen en el maestro y no están registrados.
         $vistos = [];
-        $remesaId = (int) $remesa['id'];
         foreach ([
             ['remitente_tipo_id', 'remitente_num_id'],
             ['destinatario_tipo_id', 'destinatario_num_id'],
@@ -69,7 +70,7 @@ final class ColaRepo
             $vistos[$clave] = true;
             $t = $this->fila($pdo, 'SELECT id, estado_rndc FROM tercero WHERE tipo_id = ? AND num_id = ?', [$tipo, $num]);
             if ($t !== null && ($t['estado_rndc'] ?? '') !== 'registrado') {
-                $this->insertarCola($pdo, $solicitudId, $remesaId, 'tercero', (int) $t['id'], 'Tercero ' . $tipo . ' ' . $num);
+                $this->insertarCola($pdo, $solicitudId, $manifiestoId, 'tercero', (int) $t['id'], 'Tercero ' . $tipo . ' ' . $num);
             }
         }
 
@@ -77,26 +78,32 @@ final class ColaRepo
         if (!empty($manif['placa_vehiculo'])) {
             $v = $this->fila($pdo, 'SELECT id, estado_rndc FROM vehiculo WHERE placa = ?', [strtoupper((string) $manif['placa_vehiculo'])]);
             if ($v !== null && ($v['estado_rndc'] ?? '') !== 'registrado') {
-                $this->insertarCola($pdo, $solicitudId, $remesaId, 'vehiculo', (int) $v['id'], 'Vehículo ' . $manif['placa_vehiculo']);
+                $this->insertarCola($pdo, $solicitudId, $manifiestoId, 'vehiculo', (int) $v['id'], 'Vehículo ' . $manif['placa_vehiculo']);
             }
         }
 
-        // 3) Remesa y 4) Manifiesto (payload XML completo, sin credenciales).
-        $this->insertarCola($pdo, $solicitudId, $remesaId, 'remesa', (int) $remesa['id'], $this->payloadRemesa($remesa, $pdo));
-        $this->insertarCola($pdo, $solicitudId, $remesaId, 'manifiesto', (int) $manif['id'], $this->payloadManifiesto($manif, $remesa, $pdo));
+        // 3) Remesas (una fila de cola por cada remesa).
+        foreach ($remesaIds as $rid) {
+            $rem = $this->fila($pdo, 'SELECT * FROM remesa WHERE id = ?', [$rid]);
+            if ($rem === null) {
+                continue;
+            }
+            $this->insertarCola($pdo, $solicitudId, $manifiestoId, 'remesa', (int) $rid, $this->payloadRemesa($rem, $pdo));
+        }
 
-        unset($maxIntentos);
+        // 4) Manifiesto (payload XML con todas las remesas del bloque).
+        $this->insertarCola($pdo, $solicitudId, $manifiestoId, 'manifiesto', $manifiestoId, $this->payloadManifiesto($manif, $pdo));
     }
 
-    /** Inserta una fila en la cola. */
-    private function insertarCola(PDO $pdo, int $solicitudId, int $remesaId, string $tipo, int $referenciaId, string $payloadXml): void
+    /** Inserta una fila en la cola (usa manifiesto_id en lugar de remesa_id). */
+    private function insertarCola(PDO $pdo, int $solicitudId, int $manifiestoId, string $tipo, int $referenciaId, string $payloadXml): void
     {
         $pdo->prepare(
             'INSERT INTO cola_envios
-                (solicitud_id, remesa_id, tipo_documento, referencia_id, proceso_rndc, orden, payload_xml, estado, max_intentos)
+                (solicitud_id, manifiesto_id, tipo_documento, referencia_id, proceso_rndc, orden, payload_xml, estado, max_intentos)
              VALUES (?, ?, ?, ?, ?, ?, ?, \'pendiente\', ?)'
         )->execute([
-            $solicitudId, $remesaId, $tipo, $referenciaId, self::PROCESO[$tipo], self::ORDEN[$tipo],
+            $solicitudId, $manifiestoId, $tipo, $referenciaId, self::PROCESO[$tipo], self::ORDEN[$tipo],
             $payloadXml, (int) config()['cola']['max_intentos'],
         ]);
     }
@@ -159,9 +166,8 @@ final class ColaRepo
                 $intentos = (int) $row['intentos'] + 1;
                 $agotado  = $intentos >= (int) $row['max_intentos'];
                 db()->prepare(
-                    'UPDATE cola_envios
-                     SET estado = ?, intentos = ?, ultimo_error = ?, respuesta_rndc = ?,
-                         programado_para = ' . ($agotado ? 'NULL' : 'DATE_ADD(NOW(), INTERVAL ? MINUTE)') . '
+                    'UPDATE cola_envios SET estado = ?, intentos = ?, ultimo_error = ?, respuesta_rndc = ?,
+                            programado_para = ' . ($agotado ? 'NULL' : 'DATE_ADD(NOW(), INTERVAL ? MINUTE)') . '
                      WHERE id = ?'
                 )->execute($agotado
                     ? ['error', $intentos, $resp->error, $resp->respuestaCruda, $id]
@@ -235,10 +241,10 @@ final class ColaRepo
     }
 
     /**
-     * Procesa los items de cola de un único despacho (remesa + manifiesto + ter/veh).
+     * Procesa los items de cola de un único despacho (remesas + manifiesto + ter/veh).
      * @return array{ok:bool,mensaje:string}
      */
-    public function procesarDespacho(int $remesaId): array
+    public function procesarDespacho(int $manifiestoId): array
     {
         $habilitado = (bool) config()['cola']['envio_habilitado'];
         $minutos    = (int) config()['cola']['minutos_reintento'];
@@ -247,10 +253,10 @@ final class ColaRepo
 
         $items = db()->prepare(
             "SELECT * FROM cola_envios
-             WHERE remesa_id = ? AND estado IN ('pendiente','error')
+             WHERE manifiesto_id = ? AND estado IN ('pendiente','error')
              ORDER BY orden, id"
         );
-        $items->execute([$remesaId]);
+        $items->execute([$manifiestoId]);
         foreach ($items as $row) {
             $id = (int) $row['id'];
             if (!$habilitado) {
@@ -411,9 +417,8 @@ final class ColaRepo
 
     /**
      * @param array<string,mixed> $m manifiesto
-     * @param array<string,mixed> $r remesa (para CONSECUTIVOREMESA)
      */
-    private function payloadManifiesto(array $m, array $r, PDO $pdo): string
+    private function payloadManifiesto(array $m, PDO $pdo): string
     {
         // La placa del remolque se hereda del maestro de vehículos.
         $remolque = null;
@@ -456,14 +461,24 @@ final class ColaRepo
         // NITMONITOREOFLOTA: siempre se envía (incluso vacío), required display.
         $vars['NITMONITOREOFLOTA'] = $m['emf'] ?? '';
 
-        // Remesas asociadas al manifiesto (bloque anidado).
-        $remesas = '<REMESASMAN procesoid="43"><REMESA>'
-            . '<CONSECUTIVOREMESA>' . RndcClient::escaparXml((string) $r['num_remesa']) . '</CONSECUTIVOREMESA>'
-            . '</REMESA></REMESASMAN>';
+        // Remesas asociadas al manifiesto (bloque anidado) — iterar join table.
+        $remesasStmt = $pdo->prepare(
+            'SELECT r.num_remesa FROM remesa r
+             JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+             WHERE mr.manifiesto_id = ?
+             ORDER BY r.id'
+        );
+        $remesasStmt->execute([(int) $m['id']]);
+        $remesasXml = '';
+        foreach ($remesasStmt as $rem) {
+            $remesasXml .= '<REMESA>'
+                . '<CONSECUTIVOREMESA>' . RndcClient::escaparXml((string) $rem['num_remesa']) . '</CONSECUTIVOREMESA>'
+                . '</REMESA>';
+        }
 
         $xml = RndcClient::renderVariables($vars);
         $xml .= '<NITMONITOREOFLOTA>' . RndcClient::escaparXml($m['emf'] ?? '') . '</NITMONITOREOFLOTA>';
-        return $xml . $remesas;
+        return $xml . '<REMESASMAN procesoid="43">' . $remesasXml . '</REMESASMAN>';
     }
 
     /** Normaliza un número: quita decimales superfluos (3000000.00 → 3000000). */
@@ -514,20 +529,22 @@ final class ColaRepo
     }
 
     /**
-     * Lista despachos (agrupados por remesa) con estado general de cada uno.
+     * Lista despachos (agrupados por manifiesto) con estado de cada remesa.
      * @return list<array{remesa_id:int, solicitud_id:int, consecutivo:string, placa:string,
-     *                     estado_remesa:string, num_remesa:string}>
+     *                     estado_remesa:string, num_remesa:string, num_manifiesto:string,
+     *                     manifiesto_id:int}>
      */
     public function listarDespachos(): array
     {
         return db()->query(
             "SELECT r.id AS remesa_id, r.solicitud_id, s.consecutivo,
-                    r.num_remesa, m.num_manifiesto,
+                    r.num_remesa, m.num_manifiesto, m.id AS manifiesto_id,
                     r.created_at,
                     r.estado_rndc AS estado_remesa
              FROM remesa r
              JOIN solicitud_servicio s ON s.id = r.solicitud_id
-             LEFT JOIN manifiesto m ON m.remesa_id = r.id
+             LEFT JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+             LEFT JOIN manifiesto m ON m.id = mr.manifiesto_id
              ORDER BY r.id DESC"
         )->fetchAll();
     }
@@ -537,7 +554,8 @@ final class ColaRepo
     {
         $from = 'FROM remesa r
                  JOIN solicitud_servicio s ON s.id = r.solicitud_id
-                 LEFT JOIN manifiesto m ON m.remesa_id = r.id';
+                 LEFT JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+                 LEFT JOIN manifiesto m ON m.id = mr.manifiesto_id';
         $where = 'WHERE 1=1';
         $params = [];
         if ($q !== '') {
@@ -559,7 +577,7 @@ final class ColaRepo
 
         $offset = max(0, ($pagina - 1) * $porPagina);
         $cols = 'r.id AS remesa_id, r.solicitud_id, s.consecutivo,
-                 r.num_remesa, m.num_manifiesto,
+                 r.num_remesa, m.num_manifiesto, m.id AS manifiesto_id,
                  r.created_at,
                  r.estado_rndc AS estado_remesa';
         $stmt = db()->prepare("SELECT $cols $from $where ORDER BY r.id DESC LIMIT ? OFFSET ?");
@@ -569,7 +587,7 @@ final class ColaRepo
 
     /**
      * Procesa los items de cola PENDIENTES de una solicitud (tercero, vehículo,
-     * remesa y manifiesto).
+     * remesas y manifiesto).
      * @return array{enviados:int,errores:int}
      */
     public function procesarSolicitud(int $solicitudId): array
