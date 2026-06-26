@@ -386,9 +386,13 @@ try {
             break;
 
         case 'cola':
+            $proceso = $_GET['proceso'] ?? 'todos';
+            if (!in_array($proceso, ['todos', 'despacho', 'cumplido'], true)) {
+                $proceso = 'todos';
+            }
             $cola = (new ColaRepo());
-            $filas = $cola->listar();
-            $resumen = $cola->resumen();
+            $filas = $cola->listar($proceso);
+            $resumen = $cola->resumen($proceso);
             $envioHabilitado = (bool) config()['cola']['envio_habilitado'];
             layout_top('Cola de envíos', 'cola');
             require __DIR__ . '/../src/vistas/cola.php';

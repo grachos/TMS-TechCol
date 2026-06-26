@@ -599,14 +599,27 @@ final class ColaRepo
 
     // ---------- Lectura para el monitor ----------
 
-    /** @return list<array<string,mixed>> */
-    public function listar(int $limite = 200): array
+    /**
+     * Lista la cola de envíos.
+     * @param 'todos'|'despacho'|'cumplido' $proceso Filtro por categoría de proceso.
+     * @return list<array<string,mixed>>
+     */
+    public function listar(string $proceso = 'todos', int $limite = 200): array
     {
+        $filtros = [
+            'despacho' => "'remesa','manifiesto'",
+            'cumplido' => "'cumplido_remesa','cumplido_manifiesto'",
+        ];
+        $where = "WHERE c.tipo_documento NOT IN ('tercero','vehiculo')";
+        if (isset($filtros[$proceso])) {
+            $where .= " AND c.tipo_documento IN ({$filtros[$proceso]})";
+        }
         return db()->query(
-            'SELECT c.*, s.consecutivo
+            "SELECT c.*, s.consecutivo
              FROM cola_envios c
              LEFT JOIN solicitud_servicio s ON s.id = c.solicitud_id
-             ORDER BY c.id DESC LIMIT ' . (int) $limite
+             {$where}
+             ORDER BY c.id DESC LIMIT " . (int) $limite
         )->fetchAll();
     }
 
@@ -758,9 +771,17 @@ final class ColaRepo
     }
 
     /** @return array<string,int> conteo por estado */
-    public function resumen(): array
+    public function resumen(string $proceso = 'todos'): array
     {
-        $filas = db()->query('SELECT estado, COUNT(*) n FROM cola_envios GROUP BY estado')->fetchAll();
+        $filtros = [
+            'despacho' => "'remesa','manifiesto'",
+            'cumplido' => "'cumplido_remesa','cumplido_manifiesto'",
+        ];
+        $where = "WHERE tipo_documento NOT IN ('tercero','vehiculo')";
+        if (isset($filtros[$proceso])) {
+            $where .= " AND tipo_documento IN ({$filtros[$proceso]})";
+        }
+        $filas = db()->query("SELECT estado, COUNT(*) n FROM cola_envios {$where} GROUP BY estado")->fetchAll();
         $out = [];
         foreach ($filas as $f) {
             $out[$f['estado']] = (int) $f['n'];

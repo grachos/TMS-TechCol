@@ -5,6 +5,7 @@
  * @var list<array<string,mixed>> $filas
  * @var array<string,int>         $resumen
  * @var bool                      $envioHabilitado
+ * @var string                    $proceso
  */
 declare(strict_types=1);
 
@@ -27,6 +28,12 @@ $categorias = [
 ];
 
 $coloresCategoria = ['Maestro' => 'azul', 'Despacho' => 'verde', 'Cumplido' => 'naranja'];
+
+$opcionesProceso = [
+    'todos'    => 'Despacho + Cumplido',
+    'despacho' => 'Despacho',
+    'cumplido' => 'Cumplido',
+];
 ?>
 <div class="cabecera-lista">
     <h1>Cola de envíos al RNDC</h1>
@@ -48,6 +55,17 @@ $coloresCategoria = ['Maestro' => 'azul', 'Despacho' => 'verde', 'Cumplido' => '
     </div>
 <?php endif; ?>
 
+<form method="get" class="filtro-bar">
+    <input type="hidden" name="r" value="cola">
+    <label class="filtro-bar__lbl">Proceso:</label>
+    <select name="proceso" onchange="this.form.submit()" class="filtro-bar__select">
+        <?php foreach ($opcionesProceso as $val => $lbl): ?>
+            <option value="<?= e($val) ?>" <?= $proceso === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <noscript><button type="submit" class="btn btn--small">Filtrar</button></noscript>
+</form>
+
 <p class="ayuda">
     Resumen:
     <?php foreach (['pendiente', 'enviando', 'enviado', 'error'] as $est): ?>
@@ -56,7 +74,7 @@ $coloresCategoria = ['Maestro' => 'azul', 'Despacho' => 'verde', 'Cumplido' => '
 </p>
 
 <?php if (empty($filas)): ?>
-    <div class="tarjeta vacio">La cola está vacía. Confirma el despacho de una solicitud o registra el cumplido para encolar sus documentos.</div>
+    <div class="tarjeta vacio">No hay documentos pendientes en la cola. Confirma el despacho de una solicitud o registra el cumplido para encolar sus documentos.</div>
 <?php else: ?>
     <div class="tabla-responsive">
         <table class="tabla">

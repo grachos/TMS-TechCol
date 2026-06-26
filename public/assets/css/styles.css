@@ -514,6 +514,36 @@ section.tarjeta + section.tarjeta { margin-top: 0; }
   box-shadow: 0 0 0 3px rgba(42, 111, 201, .10);
 }
 
+/* ---- Filter bar (inline label + select) ---- */
+.filtro-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.filtro-bar__lbl {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-500);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.filtro-bar__select {
+  padding: 6px 10px;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--slate-900);
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+}
+.filtro-bar__select:focus {
+  outline: none;
+  border-color: var(--azul-500);
+  box-shadow: 0 0 0 3px rgba(42, 111, 201, .10);
+}
+
 /* ---- Search Bar (single input) ---- */
 .barra-busqueda {
   display: flex;
