@@ -601,10 +601,10 @@ final class ColaRepo
 
     /**
      * Lista la cola de envíos.
-     * @param 'todos'|'despacho'|'cumplido' $proceso Filtro por categoría de proceso.
+     * @param 'despacho'|'cumplido' $proceso Filtro por categoría de proceso.
      * @return list<array<string,mixed>>
      */
-    public function listar(string $proceso = 'todos', int $limite = 200): array
+    public function listar(string $proceso = 'despacho', int $limite = 200): array
     {
         $filtros = [
             'despacho' => "'remesa','manifiesto'",
@@ -697,8 +697,7 @@ final class ColaRepo
              JOIN solicitud_servicio s ON s.id = m.solicitud_id
              JOIN manifiesto_remesa mr2 ON mr2.manifiesto_id = m.id
              JOIN remesa r2 ON r2.id = mr2.remesa_id
-             WHERE m.estado_rndc = 'aceptado'
-               AND m.cumplido_estado_rndc = 'pendiente'
+             WHERE m.cumplido_estado_rndc = 'pendiente'
              GROUP BY m.id, m.solicitud_id, s.consecutivo, m.num_manifiesto, m.placa_vehiculo
              ORDER BY m.id DESC"
         )->fetchAll();
@@ -771,7 +770,7 @@ final class ColaRepo
     }
 
     /** @return array<string,int> conteo por estado */
-    public function resumen(string $proceso = 'todos'): array
+    public function resumen(string $proceso = 'despacho'): array
     {
         $filtros = [
             'despacho' => "'remesa','manifiesto'",

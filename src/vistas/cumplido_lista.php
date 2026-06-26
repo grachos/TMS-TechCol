@@ -14,7 +14,7 @@ declare(strict_types=1);
 <?php flash(); ?>
 
 <?php if (empty($pendientes)): ?>
-    <div class="tarjeta vacio">No hay despachos pendientes de cumplido. El manifiesto debe estar aceptado por el RNDC.</div>
+    <div class="tarjeta vacio">No hay despachos pendientes de cumplido. Confirma un despacho para registrar su cumplido.</div>
 <?php else: ?>
     <div class="tabla-responsive">
         <table class="tabla">
