@@ -269,6 +269,10 @@ section.tarjeta + section.tarjeta { margin-top: 0; }
 .chip--pendiente, .chip--rndc { background: var(--amber-100); color: var(--amber-600); }
 .chip--aceptado { background: var(--emerald-100); color: var(--emerald-600); }
 .chip--rechazado { background: var(--red-100); color: var(--red-600); }
+.chip--azul   { background: var(--blue-100); color: var(--blue-600); }
+.chip--verde  { background: var(--emerald-100); color: var(--emerald-600); }
+.chip--naranja { background: var(--amber-100); color: var(--amber-600); }
+.chip--gris   { background: var(--slate-100); color: var(--slate-700); }
 
 /* ---- Buttons ---- */
 .btn {

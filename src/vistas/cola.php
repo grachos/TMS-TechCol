@@ -1,11 +1,32 @@
 <?php
 /**
  * Vista: monitor de la cola de envíos al RNDC (store-and-forward).
+ * Incluye tanto documentos de despacho como de cumplido.
  * @var list<array<string,mixed>> $filas
  * @var array<string,int>         $resumen
  * @var bool                      $envioHabilitado
  */
 declare(strict_types=1);
+
+$etiquetas = [
+    'tercero'             => 'Tercero',
+    'vehiculo'            => 'Vehículo',
+    'remesa'              => 'Remesa',
+    'manifiesto'          => 'Manifiesto',
+    'cumplido_remesa'     => 'Cumplido remesa',
+    'cumplido_manifiesto' => 'Cumplido manifiesto',
+];
+
+$categorias = [
+    'tercero'             => 'Maestro',
+    'vehiculo'            => 'Maestro',
+    'remesa'              => 'Despacho',
+    'manifiesto'          => 'Despacho',
+    'cumplido_remesa'     => 'Cumplido',
+    'cumplido_manifiesto' => 'Cumplido',
+];
+
+$coloresCategoria = ['Maestro' => 'azul', 'Despacho' => 'verde', 'Cumplido' => 'naranja'];
 ?>
 <div class="cabecera-lista">
     <h1>Cola de envíos al RNDC</h1>
@@ -35,36 +56,43 @@ declare(strict_types=1);
 </p>
 
 <?php if (empty($filas)): ?>
-    <div class="tarjeta vacio">La cola está vacía. Confirma el despacho de una solicitud para encolar sus documentos.</div>
+    <div class="tarjeta vacio">La cola está vacía. Confirma el despacho de una solicitud o registra el cumplido para encolar sus documentos.</div>
 <?php else: ?>
-    <table class="tabla">
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Solicitud</th>
-                <th>Documento</th>
-                <th>Proceso</th>
-                <th>Estado</th>
-                <th>Intentos</th>
-                <th>Ingreso RNDC</th>
-                <th>Último mensaje</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($filas as $f): ?>
+    <div class="tabla-responsive">
+        <table class="tabla">
+            <thead>
                 <tr>
-                    <td><?= (int) $f['id'] ?></td>
-                    <td><?= e($f['consecutivo'] ?? ('#' . $f['solicitud_id'])) ?></td>
-                    <td><?= e($f['tipo_documento']) ?></td>
-                    <td><?= (int) $f['proceso_rndc'] ?></td>
-                    <td><span class="chip chip--<?= e($f['estado']) ?>"><?= e($f['estado']) ?></span></td>
-                    <td><?= (int) $f['intentos'] ?>/<?= (int) $f['max_intentos'] ?></td>
-                    <td><?= e($f['rndc_ingreso_id'] ?? '—') ?></td>
-                    <td><small><?= e(mb_strimwidth((string) ($f['ultimo_error'] ?? ''), 0, 80, '…')) ?></small></td>
-                    <td><a href="<?= e(ruta('cola.xml', ['id' => (int) $f['id']])) ?>" target="_blank" class="btn btn--small">XML</a></td>
+                    <th>#</th>
+                    <th>Solicitud</th>
+                    <th>Tipo</th>
+                    <th>Documento</th>
+                    <th>Proceso</th>
+                    <th>Estado</th>
+                    <th>Intentos</th>
+                    <th>Ingreso RNDC</th>
+                    <th>Último mensaje</th>
+                    <th></th>
                 </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <?php foreach ($filas as $f): ?>
+                    <?php $tipo = $f['tipo_documento']; ?>
+                    <?php $cat = $categorias[$tipo] ?? '—'; ?>
+                    <?php $colorCat = $coloresCategoria[$cat] ?? 'gris'; ?>
+                    <tr>
+                        <td><?= (int) $f['id'] ?></td>
+                        <td><?= e($f['consecutivo'] ?? ('#' . $f['solicitud_id'])) ?></td>
+                        <td><span class="chip chip--<?= e($colorCat) ?>"><?= e($cat) ?></span></td>
+                        <td><?= e($etiquetas[$tipo] ?? $tipo) ?></td>
+                        <td><?= (int) $f['proceso_rndc'] ?></td>
+                        <td><span class="chip chip--<?= e($f['estado']) ?>"><?= e($f['estado']) ?></span></td>
+                        <td><?= (int) $f['intentos'] ?>/<?= (int) $f['max_intentos'] ?></td>
+                        <td><?= e($f['rndc_ingreso_id'] ?? '—') ?></td>
+                        <td><small><?= e(mb_strimwidth((string) ($f['ultimo_error'] ?? ''), 0, 80, '…')) ?></small></td>
+                        <td><a href="<?= e(ruta('cola.xml', ['id' => (int) $f['id']])) ?>" target="_blank" class="btn btn--small">XML</a></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
 <?php endif; ?>
