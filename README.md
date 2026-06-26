@@ -53,7 +53,7 @@ light-tms/
 │   ├── municipios.sql       DIVIPOLA
 │   ├── maestros.sql         tercero + vehículo
 │   ├── catalogo_configuracion.sql  configuraciones de unidad de carga
-│   └── migracion_v*.sql     migraciones incrementales (v2–v29)
+│   └── migracion_v*.sql     migraciones incrementales (v2–v30)
 ├── .env.example
 └── README.md
 ```
@@ -108,6 +108,7 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
 | 32 | `migracion_v27.sql` | Agrega `seguridadqr` a manifiesto; se consulta tras aceptación RNDC. |
 | 33 | `migracion_v28.sql` | Crea `manifiesto_remesa` (1:N remesa↔manifiesto), agrega `valor_mercancia` a remesa, `manifiesto_id` a cola_envios. |
 | 34 | `migracion_v29.sql` | Back-fill de `cola_envios.manifiesto_id` para filas existentes. |
+| 35 | `migracion_v30.sql` | Columnas de cumplido en `remesa` y `manifiesto` (procesoid 5 y 6). |
 
    > La migración v12 reemplaza la tabla `producto` completa. Después de ejecutarla,
    > corre el script `importar_productos_csv.php` para poblar los 3758 productos desde
@@ -208,6 +209,13 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
   - `cola_envios` ahora referencias `manifiesto_id` en lugar de `remesa_id`
   - `procesarDespacho()` filtra por manifiesto
   - Listado de despachos consulta vía `manifiesto_remesa`
+- [x] **Cumplido de remesas y manifiesto (procesoid 5 y 6):**
+  - Migración v30 agrega columnas de cumplido a `remesa` y `manifiesto`
+  - Lista de despachos pendientes de cumplido (manifiesto aceptado por RNDC)
+  - Formulario con datos por remesa: tipo cumplido (C/S), cantidad entregada, tiempos de descargue (llegada, entrada, salida) y tiempos de cargue condicionales
+  - Formulario con datos del manifiesto: tipo cumplido, fecha entrega documentos, ajustes financieros, observaciones
+  - Payload XML para procesoid 5 (REMESA) y procesoid 6 (MANIFIESTO) con todas las variables del diccionario RNDC
+  - Encolado automático tras guardar el cumplido
 
 > El cliente RNDC (`src/Rndc/RndcClient.php`) está verificado de extremo a extremo
 > contra el servidor real del RNDC con credenciales válidas en `.env`.
@@ -231,6 +239,22 @@ Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corche
    la respuesta de error del RNDC, facilitando la depuración.
 7. Tras la aceptación del manifiesto, se consulta automáticamente el `seguridadqr`
    ante el RNDC y se almacena para incluirlo en el QR del PDF impreso.
+
+### Fase 5 — Cumplido (procesoid 5 y 6)
+
+Una vez que el manifiesto fue aceptado por el RNDC, se puede registrar el **cumplido**
+(finalización del viaje) desde el menú *Operación → Cumplido*:
+
+1. La lista muestra los manifiestos aceptados cuyo cumplido aún está pendiente.
+2. Al hacer clic en **Cumplir** se abre un formulario con:
+   - **Por remesa**: tipo de cumplido (C=normal / S=suspendido), cantidad entregada,
+     fechas/hora de llegada, entrada y salida de descargue; y condicionalmente
+     fechas/hora de llegada a cargue si no se capturaron al crear la remesa.
+   - **Del manifiesto**: tipo de cumplido, fecha de entrega de documentos, valor
+     adicional y descuento de flete, y observaciones.
+3. Al guardar, los datos se persisten en la BD y se **encolan** para envío al RNDC
+   con procesoid 5 (cumplido remesa) y procesoid 6 (cumplido manifiesto).
+4. El worker de cola los envía en orden: cumplido_remesa (50) → cumplido_manifiesto (60).
 
 ### Consecutivos automáticos
 

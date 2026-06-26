@@ -436,6 +436,103 @@ try {
             }
             break;
 
+        case 'cumplido':
+            $pendientes = (new ColaRepo())->listarPendientesCumplido();
+            layout_top('Cumplido de despachos', 'cumplido');
+            require __DIR__ . '/../src/vistas/cumplido_lista.php';
+            layout_bottom();
+            break;
+
+        case 'cumplido.form':
+            $manifiestoId = (int) ($_GET['manifiesto_id'] ?? 0);
+            if (!$manifiestoId) { http_response_code(400); echo 'Falta manifiesto_id'; break; }
+            $repo = new ColaRepo();
+            $mm = db()->prepare('SELECT * FROM manifiesto WHERE id = ?');
+            $mm->execute([$manifiestoId]);
+            $manifiesto = $mm->fetch();
+            if (!$manifiesto) { http_response_code(404); echo 'Manifiesto no encontrado'; break; }
+            $ss = db()->prepare('SELECT * FROM solicitud_servicio WHERE id = ?');
+            $ss->execute([$manifiesto['solicitud_id']]);
+            $solicitud = $ss->fetch() ?: [];
+            $remesas = $repo->obtenerRemesasCumplido($manifiestoId);
+            layout_top('Cumplido', 'cumplido');
+            require __DIR__ . '/../src/vistas/cumplido_form.php';
+            layout_bottom();
+            break;
+
+        case 'cumplido.guardar':
+            $manifiestoId = (int) ($_GET['manifiesto_id'] ?? 0);
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$manifiestoId) {
+                header('Location: ' . ruta('cumplido'));
+                break;
+            }
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                // Guardar datos de cumplido en el manifiesto.
+                $stmtM = $pdo->prepare(
+                    "UPDATE manifiesto SET cumplido_tipo = ?, fecha_entrega_documentos = ?,
+                     valor_adicional_flete = ?, valor_descuento_flete = ?,
+                     observaciones_cumplido = ?, cumplido_estado_rndc = 'pendiente'
+                     WHERE id = ?"
+                );
+                $stmtM->execute([
+                    $_POST['cumplido_tipo'] ?? 'C',
+                    !empty($_POST['fecha_entrega_documentos']) ? $_POST['fecha_entrega_documentos'] : null,
+                    !empty($_POST['valor_adicional_flete']) ? (float) $_POST['valor_adicional_flete'] : 0,
+                    !empty($_POST['valor_descuento_flete']) ? (float) $_POST['valor_descuento_flete'] : 0,
+                    $_POST['observaciones_cumplido'] ?? '',
+                    $manifiestoId,
+                ]);
+
+                // Guardar datos de cumplido en cada remesa.
+                $remesaIds = [];
+                $stmtR = $pdo->prepare(
+                    "UPDATE remesa SET cumplido_tipo = ?, cantidad_entregada = ?,
+                     fecha_llegada_descargue = ?, hora_llegada_descargue = ?,
+                     fecha_entrada_descargue = ?, hora_entrada_descargue = ?,
+                     fecha_salida_descargue = ?, hora_salida_descargue = ?,
+                     fecha_llegada_cargue = ?, hora_llegada_cargue = ?,
+                     cumplido_estado_rndc = 'pendiente'
+                     WHERE id = ?"
+                );
+                $rdatos = $_POST['remesas'] ?? [];
+                foreach ($rdatos as $rd) {
+                    $rid = (int) ($rd['id'] ?? 0);
+                    if (!$rid) { continue; }
+                    $remesaIds[] = $rid;
+                    $stmtR->execute([
+                        $rd['cumplido_tipo'] ?? 'C',
+                        !empty($rd['cantidad_entregada']) ? (float) $rd['cantidad_entregada'] : null,
+                        !empty($rd['fecha_llegada_descargue']) ? $rd['fecha_llegada_descargue'] : null,
+                        $rd['hora_llegada_descargue'] ?? null,
+                        !empty($rd['fecha_entrada_descargue']) ? $rd['fecha_entrada_descargue'] : null,
+                        $rd['hora_entrada_descargue'] ?? null,
+                        !empty($rd['fecha_salida_descargue']) ? $rd['fecha_salida_descargue'] : null,
+                        $rd['hora_salida_descargue'] ?? null,
+                        !empty($rd['fecha_llegada_cargue']) ? $rd['fecha_llegada_cargue'] : null,
+                        $rd['hora_llegada_cargue'] ?? null,
+                        $rid,
+                    ]);
+                }
+
+                // Encolar cumplidos.
+                $manif = $pdo->prepare('SELECT solicitud_id FROM manifiesto WHERE id = ?');
+                $manif->execute([$manifiestoId]);
+                $sId = (int) ($manif->fetchColumn() ?: 0);
+                if ($sId > 0 && !empty($remesaIds)) {
+                    (new ColaRepo())->encolarCumplido($pdo, $sId, $manifiestoId, $remesaIds);
+                }
+
+                $pdo->commit();
+                header('Location: ' . ruta('cumplido', ['ok' => 'Cumplido guardado y encolado para el RNDC.']));
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $msg = config()['app']['debug'] ? $e->getMessage() : 'No se pudo guardar el cumplido.';
+                header('Location: ' . ruta('cumplido.form', ['manifiesto_id' => $manifiestoId, 'err' => $msg]));
+            }
+            break;
+
         case 'despachos':
             $pagina = max(1, (int) ($_GET['p'] ?? 1));
             $desde = !empty($_GET['desde']) ? $_GET['desde'] : null;

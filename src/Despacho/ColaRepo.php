@@ -27,9 +27,9 @@ require_once __DIR__ . '/../Maestro/VehiculoRepo.php';
 final class ColaRepo
 {
     /** Orden de envío por tipo de documento. */
-    private const ORDEN = ['tercero' => 10, 'vehiculo' => 20, 'remesa' => 30, 'manifiesto' => 40];
+    private const ORDEN = ['tercero' => 10, 'vehiculo' => 20, 'remesa' => 30, 'manifiesto' => 40, 'cumplido_remesa' => 50, 'cumplido_manifiesto' => 60];
     /** Proceso RNDC por tipo de documento. */
-    private const PROCESO = ['tercero' => 11, 'vehiculo' => 12, 'remesa' => 3, 'manifiesto' => 4];
+    private const PROCESO = ['tercero' => 11, 'vehiculo' => 12, 'remesa' => 3, 'manifiesto' => 4, 'cumplido_remesa' => 5, 'cumplido_manifiesto' => 6];
 
     /**
      * Encola los documentos de una solicitud ya despachada.
@@ -93,6 +93,29 @@ final class ColaRepo
 
         // 4) Manifiesto (payload XML con todas las remesas del bloque).
         $this->insertarCola($pdo, $solicitudId, $manifiestoId, 'manifiesto', $manifiestoId, $this->payloadManifiesto($manif, $pdo));
+    }
+
+    /**
+     * Encola los documentos de cumplido (procesoid 5 y 6) para un manifiesto ya aceptado.
+     *
+     * @param int[] $remesaIds
+     */
+    public function encolarCumplido(PDO $pdo, int $solicitudId, int $manifiestoId, array $remesaIds): void
+    {
+        // 1) Cumplido de cada remesa (procesoid 5).
+        foreach ($remesaIds as $rid) {
+            $rem = $this->fila($pdo, 'SELECT * FROM remesa WHERE id = ?', [$rid]);
+            if ($rem === null) {
+                continue;
+            }
+            $this->insertarCola($pdo, $solicitudId, $manifiestoId, 'cumplido_remesa', (int) $rid, $this->payloadCumplidoRemesa($rem));
+        }
+
+        // 2) Cumplido del manifiesto (procesoid 6).
+        $manif = $this->fila($pdo, 'SELECT * FROM manifiesto WHERE id = ?', [$manifiestoId]);
+        if ($manif !== null) {
+            $this->insertarCola($pdo, $solicitudId, $manifiestoId, 'cumplido_manifiesto', $manifiestoId, $this->payloadCumplidoManifiesto($manif));
+        }
     }
 
     /** Inserta una fila en la cola (usa manifiesto_id en lugar de remesa_id). */
@@ -322,6 +345,16 @@ final class ColaRepo
                 ->execute([(int) $row['solicitud_id']]);
             $this->consultarSeguridadQr((int) $row['referencia_id']);
         }
+        if ($row['tipo_documento'] === 'cumplido_remesa') {
+            db()->prepare(
+                "UPDATE remesa SET cumplido_estado_rndc = 'aceptado', cumplido_rndc_ingreso_id = ? WHERE id = ?"
+            )->execute([$resp->ingresoId, (int) $row['referencia_id']]);
+        }
+        if ($row['tipo_documento'] === 'cumplido_manifiesto') {
+            db()->prepare(
+                "UPDATE manifiesto SET cumplido_estado_rndc = 'aceptado', cumplido_rndc_ingreso_id = ? WHERE id = ?"
+            )->execute([$resp->ingresoId, (int) $row['referencia_id']]);
+        }
     }
 
     /** Consulta el código de seguridad QR del manifiesto ante el RNDC. */
@@ -481,6 +514,55 @@ final class ColaRepo
         return $xml . '<REMESASMAN procesoid="43">' . $remesasXml . '</REMESASMAN>';
     }
 
+    /** @param array<string,mixed> $r remesa */
+    private function payloadCumplidoRemesa(array $r): string
+    {
+        $vars = [
+            'NUMNITEMPRESATRANSPORTE'  => config()['rndc']['empresa'],
+            'NUMMANIFIESTOCARGA'       => $r['num_manifiesto'] ?? '',
+            'CONSECUTIVOREMESA'        => RndcClient::escaparXml((string) ($r['num_remesa'] ?? '')),
+            'TIPOCUMPLIDOREMESA'       => $r['cumplido_tipo'] ?? 'C',
+            'NOMUNIDADMEDIDACAPACIDAD' => $r['unidad_medida'] ?? '1',
+            'CANTIDADCARGADA'          => self::num($r['peso']),
+            'CANTIDADENTREGADA'        => self::num($r['cantidad_entregada'] ?? $r['peso']),
+        ];
+        $xml = RndcClient::renderVariables($vars);
+        if (!empty($r['fecha_llegada_descargue'])) {
+            $xml .= '<FECHALLEGADADESCARGUE>' . self::fecha($r['fecha_llegada_descargue']) . '</FECHALLEGADADESCARGUE>';
+            $xml .= '<HORALLEGADADESCARGUECUMPLIDO>' . RndcClient::escaparXml($r['hora_llegada_descargue'] ?? '') . '</HORALLEGADADESCARGUECUMPLIDO>';
+        }
+        if (!empty($r['fecha_entrada_descargue'])) {
+            $xml .= '<FECHAENTRADADESCARGUE>' . self::fecha($r['fecha_entrada_descargue']) . '</FECHAENTRADADESCARGUE>';
+            $xml .= '<HORAENTRADADESCARGUECUMPLIDO>' . RndcClient::escaparXml($r['hora_entrada_descargue'] ?? '') . '</HORAENTRADADESCARGUECUMPLIDO>';
+        }
+        if (!empty($r['fecha_salida_descargue'])) {
+            $xml .= '<FECHASALIDADESCARGUE>' . self::fecha($r['fecha_salida_descargue']) . '</FECHASALIDADESCARGUE>';
+            $xml .= '<HORASALIDADESCARGUECUMPLIDO>' . RndcClient::escaparXml($r['hora_salida_descargue'] ?? '') . '</HORASALIDADESCARGUECUMPLIDO>';
+        }
+        // Conditional: fechas de cargue solo si no se capturaron en creación.
+        if (!empty($r['fecha_llegada_cargue'])) {
+            $xml .= '<FECHALLEGADACARGUE>' . self::fecha($r['fecha_llegada_cargue']) . '</FECHALLEGADACARGUE>';
+            $xml .= '<HORALLEGADACARGUEREMESA>' . RndcClient::escaparXml($r['hora_llegada_cargue'] ?? '') . '</HORALLEGADACARGUEREMESA>';
+        }
+        return $xml;
+    }
+
+    /** @param array<string,mixed> $m manifiesto */
+    private function payloadCumplidoManifiesto(array $m): string
+    {
+        $vars = [
+            'NUMNITEMPRESATRANSPORTE'  => config()['rndc']['empresa'],
+            'NUMMANIFIESTOCARGA'       => $m['num_manifiesto'],
+            'NOMTIPOCUMPLIDOMANIFIESTO' => $m['cumplido_tipo'] ?? 'C',
+            'FECHAENTREGADOCUMENTOS'   => self::fecha($m['fecha_entrega_documentos']),
+        ];
+        $xml = RndcClient::renderVariables($vars);
+        $xml .= '<VALORADICIONALFLETE>' . self::num($m['valor_adicional_flete'] ?? 0) . '</VALORADICIONALFLETE>';
+        $xml .= '<VALORDESCUENTOFLETE>' . self::num($m['valor_descuento_flete'] ?? 0) . '</VALORDESCUENTOFLETE>';
+        $xml .= '<OBSERVACIONES>' . RndcClient::escaparXml($m['observaciones_cumplido'] ?? '') . '</OBSERVACIONES>';
+        return $xml;
+    }
+
     /** Normaliza un número: quita decimales superfluos (3000000.00 → 3000000). */
     private static function num($valor): ?string
     {
@@ -583,6 +665,41 @@ final class ColaRepo
         $stmt = db()->prepare("SELECT $cols $from $where ORDER BY r.id DESC LIMIT ? OFFSET ?");
         $stmt->execute(array_merge($params, [$porPagina, $offset]));
         return ['items' => $stmt->fetchAll(), 'total' => $total];
+    }
+
+    /**
+     * Lista despachos cuyo manifiesto fue aceptado por RNDC pero el cumplido
+     * aún está pendiente.
+     * @return list<array{manifiesto_id:int, solicitud_id:int, consecutivo:string,
+     *                     num_manifiesto:string, remesas:int, placa:string}>
+     */
+    public function listarPendientesCumplido(): array
+    {
+        return db()->query(
+            "SELECT m.id AS manifiesto_id, m.solicitud_id, s.consecutivo,
+                    m.num_manifiesto, m.placa_vehiculo AS placa,
+                    (SELECT COUNT(*) FROM manifiesto_remesa mr WHERE mr.manifiesto_id = m.id) AS remesas,
+                    COUNT(r2.id) AS remesas_cumplidas
+             FROM manifiesto m
+             JOIN solicitud_servicio s ON s.id = m.solicitud_id
+             JOIN manifiesto_remesa mr2 ON mr2.manifiesto_id = m.id
+             JOIN remesa r2 ON r2.id = mr2.remesa_id
+             WHERE m.estado_rndc = 'aceptado'
+               AND m.cumplido_estado_rndc = 'pendiente'
+             GROUP BY m.id, m.solicitud_id, s.consecutivo, m.num_manifiesto, m.placa_vehiculo
+             ORDER BY m.id DESC"
+        )->fetchAll();
+    }
+
+    /** Obtiene las remesas de un manifiesto con sus datos de cumplido. */
+    public function obtenerRemesasCumplido(int $manifiestoId): array
+    {
+        return db()->query(
+            "SELECT r.* FROM remesa r
+             JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+             WHERE mr.manifiesto_id = $manifiestoId
+             ORDER BY r.id"
+        )->fetchAll();
     }
 
     /**

@@ -22,7 +22,7 @@ function layout_top(string $titulo, string $activo = ''): void
 
     // Determinar qué grupo contiene la página activa para marcar el menú.
     $grupos = [
-        'operacion' => ['inicio', 'solicitudes', 'solicitud.ver', 'solicitud.editar', 'solicitud.nueva', 'despachos', 'despacho.confirmar', 'despacho.guardar', 'despacho.procesar', 'cola', 'cola.procesar', 'cola.procesar_item', 'cola.xml'],
+        'operacion' => ['inicio', 'solicitudes', 'solicitud.ver', 'solicitud.editar', 'solicitud.nueva', 'despachos', 'despacho.confirmar', 'despacho.guardar', 'despacho.procesar', 'cumplido', 'cumplido.form', 'cumplido.guardar', 'cola', 'cola.procesar', 'cola.procesar_item', 'cola.xml'],
         'maestros'  => ['terceros', 'tercero.nuevo', 'tercero.crear', 'tercero.editar', 'tercero.guardar', 'vehiculos', 'vehiculo.nuevo', 'vehiculo.crear', 'vehiculo.editar', 'vehiculo.guardar', 'productos', 'producto.editar', 'empresa', 'empresa.guardar'],
     ];
     $grupoActivo = '';
@@ -51,6 +51,7 @@ function layout_top(string $titulo, string $activo = ''): void
                 <button class="dropdown__toggle">Operación</button>
                 <div class="dropdown__menu">
                     <a href="<?= e(ruta('despachos')) ?>">Despachos</a>
+                    <a href="<?= e(ruta('cumplido')) ?>">Cumplido</a>
                     <a href="<?= e(ruta('cola')) ?>">Cola RNDC</a>
                     <a href="<?= e(ruta('solicitudes')) ?>">Solicitudes</a>
                 </div>
