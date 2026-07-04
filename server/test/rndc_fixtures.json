@@ -1,0 +1,82 @@
+{
+    "construirXmlInterno": {
+        "input": {
+            "tipo": "1",
+            "procesoid": 11,
+            "variables": {
+                "NUMNITEMPRESATRANSPORTE": "900123456",
+                "CODTIPOIDTERCERO": "N",
+                "NUMIDTERCERO": "800555111",
+                "NOMIDTERCERO": "Transportes Peña & Cía <S.A.>",
+                "PRIMERAPELLIDOIDTERCERO": "O'Brien",
+                "SEGUNDOAPELLIDOIDTERCERO": null,
+                "REGIMENSIMPLE": "",
+                "NOMENCLATURADIRECCION": "Cra 7 # 12-34",
+                "CODMUNICIPIORNDC": "11001000",
+                "LATITUD": "4.60971230",
+                "LONGITUD": "-74.08175000"
+            }
+        },
+        "output": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>1</tipo>\n    <procesoid>11</procesoid>\n  </solicitud>\n  <variables>\n    <NUMNITEMPRESATRANSPORTE>900123456</NUMNITEMPRESATRANSPORTE>\n    <CODTIPOIDTERCERO>N</CODTIPOIDTERCERO>\n    <NUMIDTERCERO>800555111</NUMIDTERCERO>\n    <NOMIDTERCERO>Transportes Peña &amp; Cía &lt;S.A.&gt;</NOMIDTERCERO>\n    <PRIMERAPELLIDOIDTERCERO>O&apos;Brien</PRIMERAPELLIDOIDTERCERO>\n    <NOMENCLATURADIRECCION>Cra 7 # 12-34</NOMENCLATURADIRECCION>\n    <CODMUNICIPIORNDC>11001000</CODMUNICIPIORNDC>\n    <LATITUD>4.60971230</LATITUD>\n    <LONGITUD>-74.08175000</LONGITUD>\n  </variables>\n</root>"
+    },
+    "construirSobreSoap": {
+        "input": {
+            "xmlInterno": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>1</tipo>\n    <procesoid>11</procesoid>\n  </solicitud>\n  <variables>\n    <NUMNITEMPRESATRANSPORTE>900123456</NUMNITEMPRESATRANSPORTE>\n    <CODTIPOIDTERCERO>N</CODTIPOIDTERCERO>\n    <NUMIDTERCERO>800555111</NUMIDTERCERO>\n    <NOMIDTERCERO>Transportes Peña &amp; Cía &lt;S.A.&gt;</NOMIDTERCERO>\n    <PRIMERAPELLIDOIDTERCERO>O&apos;Brien</PRIMERAPELLIDOIDTERCERO>\n    <NOMENCLATURADIRECCION>Cra 7 # 12-34</NOMENCLATURADIRECCION>\n    <CODMUNICIPIORNDC>11001000</CODMUNICIPIORNDC>\n    <LATITUD>4.60971230</LATITUD>\n    <LONGITUD>-74.08175000</LONGITUD>\n  </variables>\n</root>"
+        },
+        "output": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:urn=\"urn:BPMServicesIntf-IBPMServices\">\n  <soapenv:Header/>\n  <soapenv:Body>\n    <urn:AtenderMensajeRNDC soapenv:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\n      <Request xsi:type=\"xsd:string\">&lt;?xml version=&apos;1.0&apos; encoding=&apos;ISO-8859-1&apos;?&gt;\n&lt;root&gt;\n  &lt;acceso&gt;\n    &lt;username&gt;miUsuario&lt;/username&gt;\n    &lt;password&gt;miClave&amp;amp;&amp;lt;&amp;gt;&lt;/password&gt;\n  &lt;/acceso&gt;\n  &lt;solicitud&gt;\n    &lt;tipo&gt;1&lt;/tipo&gt;\n    &lt;procesoid&gt;11&lt;/procesoid&gt;\n  &lt;/solicitud&gt;\n  &lt;variables&gt;\n    &lt;NUMNITEMPRESATRANSPORTE&gt;900123456&lt;/NUMNITEMPRESATRANSPORTE&gt;\n    &lt;CODTIPOIDTERCERO&gt;N&lt;/CODTIPOIDTERCERO&gt;\n    &lt;NUMIDTERCERO&gt;800555111&lt;/NUMIDTERCERO&gt;\n    &lt;NOMIDTERCERO&gt;Transportes Peña &amp;amp; Cía &amp;lt;S.A.&amp;gt;&lt;/NOMIDTERCERO&gt;\n    &lt;PRIMERAPELLIDOIDTERCERO&gt;O&amp;apos;Brien&lt;/PRIMERAPELLIDOIDTERCERO&gt;\n    &lt;NOMENCLATURADIRECCION&gt;Cra 7 # 12-34&lt;/NOMENCLATURADIRECCION&gt;\n    &lt;CODMUNICIPIORNDC&gt;11001000&lt;/CODMUNICIPIORNDC&gt;\n    &lt;LATITUD&gt;4.60971230&lt;/LATITUD&gt;\n    &lt;LONGITUD&gt;-74.08175000&lt;/LONGITUD&gt;\n  &lt;/variables&gt;\n&lt;/root&gt;</Request>\n    </urn:AtenderMensajeRNDC>\n  </soapenv:Body>\n</soapenv:Envelope>"
+    },
+    "sobreSoapIso88591Base64": {
+        "input": {
+            "xmlInterno": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>1</tipo>\n    <procesoid>11</procesoid>\n  </solicitud>\n  <variables>\n    <NUMNITEMPRESATRANSPORTE>900123456</NUMNITEMPRESATRANSPORTE>\n    <CODTIPOIDTERCERO>N</CODTIPOIDTERCERO>\n    <NUMIDTERCERO>800555111</NUMIDTERCERO>\n    <NOMIDTERCERO>Transportes Peña &amp; Cía &lt;S.A.&gt;</NOMIDTERCERO>\n    <PRIMERAPELLIDOIDTERCERO>O&apos;Brien</PRIMERAPELLIDOIDTERCERO>\n    <NOMENCLATURADIRECCION>Cra 7 # 12-34</NOMENCLATURADIRECCION>\n    <CODMUNICIPIORNDC>11001000</CODMUNICIPIORNDC>\n    <LATITUD>4.60971230</LATITUD>\n    <LONGITUD>-74.08175000</LONGITUD>\n  </variables>\n</root>"
+        },
+        "output": "PHNvYXBlbnY6RW52ZWxvcGUgeG1sbnM6c29hcGVudj0iaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvc29hcC9lbnZlbG9wZS8iIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiIHhtbG5zOnhzZD0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEiIHhtbG5zOnVybj0idXJuOkJQTVNlcnZpY2VzSW50Zi1JQlBNU2VydmljZXMiPgogIDxzb2FwZW52OkhlYWRlci8+CiAgPHNvYXBlbnY6Qm9keT4KICAgIDx1cm46QXRlbmRlck1lbnNhamVSTkRDIHNvYXBlbnY6ZW5jb2RpbmdTdHlsZT0iaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvc29hcC9lbmNvZGluZy8iPgogICAgICA8UmVxdWVzdCB4c2k6dHlwZT0ieHNkOnN0cmluZyI+Jmx0Oz94bWwgdmVyc2lvbj0mYXBvczsxLjAmYXBvczsgZW5jb2Rpbmc9JmFwb3M7SVNPLTg4NTktMSZhcG9zOz8mZ3Q7CiZsdDtyb290Jmd0OwogICZsdDthY2Nlc28mZ3Q7CiAgICAmbHQ7dXNlcm5hbWUmZ3Q7bWlVc3VhcmlvJmx0Oy91c2VybmFtZSZndDsKICAgICZsdDtwYXNzd29yZCZndDttaUNsYXZlJmFtcDthbXA7JmFtcDtsdDsmYW1wO2d0OyZsdDsvcGFzc3dvcmQmZ3Q7CiAgJmx0Oy9hY2Nlc28mZ3Q7CiAgJmx0O3NvbGljaXR1ZCZndDsKICAgICZsdDt0aXBvJmd0OzEmbHQ7L3RpcG8mZ3Q7CiAgICAmbHQ7cHJvY2Vzb2lkJmd0OzExJmx0Oy9wcm9jZXNvaWQmZ3Q7CiAgJmx0Oy9zb2xpY2l0dWQmZ3Q7CiAgJmx0O3ZhcmlhYmxlcyZndDsKICAgICZsdDtOVU1OSVRFTVBSRVNBVFJBTlNQT1JURSZndDs5MDAxMjM0NTYmbHQ7L05VTU5JVEVNUFJFU0FUUkFOU1BPUlRFJmd0OwogICAgJmx0O0NPRFRJUE9JRFRFUkNFUk8mZ3Q7TiZsdDsvQ09EVElQT0lEVEVSQ0VSTyZndDsKICAgICZsdDtOVU1JRFRFUkNFUk8mZ3Q7ODAwNTU1MTExJmx0Oy9OVU1JRFRFUkNFUk8mZ3Q7CiAgICAmbHQ7Tk9NSURURVJDRVJPJmd0O1RyYW5zcG9ydGVzIFBl8WEgJmFtcDthbXA7IEPtYSAmYW1wO2x0O1MuQS4mYW1wO2d0OyZsdDsvTk9NSURURVJDRVJPJmd0OwogICAgJmx0O1BSSU1FUkFQRUxMSURPSURURVJDRVJPJmd0O08mYW1wO2Fwb3M7QnJpZW4mbHQ7L1BSSU1FUkFQRUxMSURPSURURVJDRVJPJmd0OwogICAgJmx0O05PTUVOQ0xBVFVSQURJUkVDQ0lPTiZndDtDcmEgNyAjIDEyLTM0Jmx0Oy9OT01FTkNMQVRVUkFESVJFQ0NJT04mZ3Q7CiAgICAmbHQ7Q09ETVVOSUNJUElPUk5EQyZndDsxMTAwMTAwMCZsdDsvQ09ETVVOSUNJUElPUk5EQyZndDsKICAgICZsdDtMQVRJVFVEJmd0OzQuNjA5NzEyMzAmbHQ7L0xBVElUVUQmZ3Q7CiAgICAmbHQ7TE9OR0lUVUQmZ3Q7LTc0LjA4MTc1MDAwJmx0Oy9MT05HSVRVRCZndDsKICAmbHQ7L3ZhcmlhYmxlcyZndDsKJmx0Oy9yb290Jmd0OzwvUmVxdWVzdD4KICAgIDwvdXJuOkF0ZW5kZXJNZW5zYWplUk5EQz4KICA8L3NvYXBlbnY6Qm9keT4KPC9zb2FwZW52OkVudmVsb3BlPg=="
+    },
+    "previewXmlInterno": {
+        "input": {
+            "procesoid": 4,
+            "variablesXml": "<CONSECUTIVOREMESA>0000000001</CONSECUTIVOREMESA><REMESASMAN procesoid=\"43\"><REMESA><CONSECUTIVOREMESA>REM-00001</CONSECUTIVOREMESA></REMESA></REMESASMAN>"
+        },
+        "output": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>1</tipo>\n    <procesoid>4</procesoid>\n  </solicitud>\n  <variables><CONSECUTIVOREMESA>0000000001</CONSECUTIVOREMESA><REMESASMAN procesoid=\"43\"><REMESA><CONSECUTIVOREMESA>REM-00001</CONSECUTIVOREMESA></REMESA></REMESASMAN></variables>\n</root>"
+    },
+    "renderVariables": {
+        "input": {
+            "vars": {
+                "NUMNITEMPRESATRANSPORTE": "900123456",
+                "CODTIPOIDTERCERO": "N",
+                "NUMIDTERCERO": "800555111",
+                "NOMIDTERCERO": "Transportes Peña & Cía <S.A.>",
+                "PRIMERAPELLIDOIDTERCERO": "O'Brien",
+                "SEGUNDOAPELLIDOIDTERCERO": null,
+                "REGIMENSIMPLE": "",
+                "NOMENCLATURADIRECCION": "Cra 7 # 12-34",
+                "CODMUNICIPIORNDC": "11001000",
+                "LATITUD": "4.60971230",
+                "LONGITUD": "-74.08175000"
+            }
+        },
+        "output": "<NUMNITEMPRESATRANSPORTE>900123456</NUMNITEMPRESATRANSPORTE><CODTIPOIDTERCERO>N</CODTIPOIDTERCERO><NUMIDTERCERO>800555111</NUMIDTERCERO><NOMIDTERCERO>Transportes Peña &amp; Cía &lt;S.A.&gt;</NOMIDTERCERO><PRIMERAPELLIDOIDTERCERO>O&apos;Brien</PRIMERAPELLIDOIDTERCERO><NOMENCLATURADIRECCION>Cra 7 # 12-34</NOMENCLATURADIRECCION><CODMUNICIPIORNDC>11001000</CODMUNICIPIORNDC><LATITUD>4.60971230</LATITUD><LONGITUD>-74.08175000</LONGITUD>"
+    },
+    "construirXmlConsulta": {
+        "input": {
+            "tipo": "3",
+            "procesoid": 4,
+            "campos": [
+                "INGRESOID",
+                "FECHAING",
+                "SEGURIDADOR"
+            ],
+            "filtro": {
+                "NUMNITEMPRESATRANSPORTE": "'900123456'",
+                "NUMMANIFIESTOCARGA": "'MAN-00001'"
+            },
+            "rango": []
+        },
+        "output": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>3</tipo>\n    <procesoid>4</procesoid>\n  </solicitud>\n  <variables>INGRESOID,FECHAING,SEGURIDADOR</variables>\n  <documento>\n    <NUMNITEMPRESATRANSPORTE>&apos;900123456&apos;</NUMNITEMPRESATRANSPORTE>\n    <NUMMANIFIESTOCARGA>&apos;MAN-00001&apos;</NUMMANIFIESTOCARGA>\n  </documento>\n</root>"
+    },
+    "escaparXml": {
+        "input": {
+            "valor": "a & b < c > d ' e \" f ñ á"
+        },
+        "output": "a &amp; b &lt; c &gt; d &apos; e &quot; f ñ á"
+    }
+}

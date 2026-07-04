@@ -1,0 +1,23 @@
+{
+  "name": "tms-light-new",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Light TMS - Colombian freight TMS (RNDC). Modern stack: React + Node/Express + TypeScript + mysql2. The /public + /src PHP app is kept as reference until parity.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
+    "seed:admin": "npm --prefix server run seed:admin",
+    "worker": "npm --prefix server run worker",
+    "test": "npm --prefix server test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
