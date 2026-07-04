@@ -19,11 +19,10 @@ el sistema valida que el producto tenga esos campos antes de permitir guardar.
 
 Pensado para **hosting web/cloud de Hostinger** (LAMP administrado):
 
-- **PHP 8.x** (sin Composer; se sube por FTP/File Manager)
-- **MariaDB** (compatible MySQL), administrada con **phpMyAdmin**
-- Cliente RNDC en PHP (SOAP/XML)
-- **Cron job** de Hostinger para el worker de reintento
-- Sin autenticación ni CSRF (gaps conocidos, no abordados aún)
+Frontend	React 18 + TypeScript + Vite + TailwindCSS + Recharts + Zustand + Lucide Icons
+Backend	Node.js + Express + TypeScript + MySQL2
+Base de Datos	MySQL
+Autenticación	JWT (staff) + QR code (huéspedes)
 
 ## Estructura
 
