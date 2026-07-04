@@ -19,10 +19,13 @@ el sistema valida que el producto tenga esos campos antes de permitir guardar.
 
 Pensado para **hosting web/cloud de Hostinger** (LAMP administrado):
 
-Frontend	React 18 + TypeScript + Vite + TailwindCSS + Recharts + Zustand + Lucide Icons
-Backend	Node.js + Express + TypeScript + MySQL2
-Base de Datos	MySQL
-Autenticación	JWT (staff) + QR code (huéspedes)
+| Capa | Tecnología |
+|------|-----------|
+| **Frontend** | React 18 + TypeScript + Vite + TailwindCSS + Recharts + Zustand + Lucide Icons |
+| **Backend** | Node.js + Express + TypeScript + MySQL2 |
+| **Base de Datos** | MySQL|
+| **Autenticación** | JWT (staff) + QR code (huéspedes) |
+| **QR** | qrcode (npm) |
 
 ## Estructura
 
