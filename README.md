@@ -33,6 +33,7 @@ truth until parity is signed off.
 - [Safety switch (RNDC sending)](#safety-switch-rndc-sending)
 - [Testing & parity](#testing--parity)
 - [Migration notes](#migration-notes-php--nodejs)
+- [Deploying to Hostinger](#deploying-to-hostinger)
 
 ---
 
@@ -238,3 +239,10 @@ business rules are preserved, not reinterpreted. Highlights:
   CSV **Informe**.
 
 See [docs/MODERNIZACION.md](docs/MODERNIZACION.md) for the full migration guide.
+
+## Deploying to Hostinger
+
+See [DEPLOY.md](DEPLOY.md) for the full step-by-step guide (database import
+order, Node.js App setup in hPanel, static frontend build, cron for the queue
+worker). It replaces [`legacy/DEPLOY.md`](legacy/DEPLOY.md), which only
+covered the old PHP/LAMP setup.
