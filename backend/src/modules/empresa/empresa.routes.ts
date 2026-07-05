@@ -17,6 +17,8 @@ const optionalStr = z.string().trim().optional().nullable();
 const empresaSchema = z.object({
   tipo_id: z.enum(['N', 'C']).default('N'),
   nit: z.string().trim().min(1, 'El NIT es obligatorio.'),
+  rndc_username: optionalStr,
+  rndc_password: optionalStr,
   razon_social: optionalStr,
   direccion: optionalStr,
   telefono: optionalStr,

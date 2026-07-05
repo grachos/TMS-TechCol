@@ -4,10 +4,10 @@
 
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { db } from '../../db/pool.js';
-import { config } from '../../config/env.js';
 import { RndcClient } from '../../rndc/RndcClient.js';
 import { RndcRespuesta } from '../../rndc/RndcRespuesta.js';
 import type { Tercero, TerceroListRow, Paginated } from '../../db/types.js';
+import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
 
 /** Whitelisted columns accepted from the form (mirrors TerceroRepo::CAMPOS). */
 const CAMPOS = [
@@ -140,9 +140,9 @@ export async function registrarEnRndc(id: number): Promise<RndcRespuesta> {
     return RndcRespuesta.fallo('Tercero no encontrado.', 0, '');
   }
 
-  const rndc = RndcClient.desdeConfig();
+  const rndc = await RndcClient.desdeConfig();
   const vars = {
-    NUMNITEMPRESATRANSPORTE: config().rndc.empresa,
+    NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     CODTIPOIDTERCERO: t.tipo_id,
     NUMIDTERCERO: t.num_id,
     NOMIDTERCERO: t.nombre,

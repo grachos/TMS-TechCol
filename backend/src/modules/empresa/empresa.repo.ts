@@ -16,6 +16,9 @@ export interface Empresa {
   id: number;
   tipo_id: string;
   nit: string;
+  /** Credenciales RNDC — antes en .env (RNDC_USERNAME/RNDC_PASSWORD), ahora aquí. */
+  rndc_username: string | null;
+  rndc_password: string | null;
   razon_social: string | null;
   /** Encabezado de los PDF de manifiesto/remesa (dirección, teléfono, ciudad). */
   direccion: string | null;
@@ -37,6 +40,8 @@ const DEFAULTS: Empresa = {
   id: 1,
   tipo_id: 'N',
   nit: '',
+  rndc_username: '',
+  rndc_password: '',
   razon_social: '',
   direccion: '',
   telefono: '',
@@ -66,14 +71,15 @@ export async function guardar(datos: Partial<Empresa>): Promise<void> {
   };
   await db().query(
     `INSERT INTO maestro_empresa (
-        id, tipo_id, nit, razon_social, direccion, telefono, cod_municipio, municipio_nombre,
+        id, tipo_id, nit, rndc_username, rndc_password, razon_social, direccion, telefono, cod_municipio, municipio_nombre,
         nro_poliza, aseguradora_carga_nombre, aseguradora_carga_nit, poliza_carga_numero, poliza_carga_vencimiento,
         emf, consecutivo_remesa, consecutivo_manifiesto)
-     VALUES (1, :tipo_id, :nit, :razon_social, :direccion, :telefono, :cod_municipio, :municipio_nombre,
+     VALUES (1, :tipo_id, :nit, :rndc_username, :rndc_password, :razon_social, :direccion, :telefono, :cod_municipio, :municipio_nombre,
         :nro_poliza, :aseguradora_carga_nombre, :aseguradora_carga_nit, :poliza_carga_numero, :poliza_carga_vencimiento,
         :emf, :consecutivo_remesa, :consecutivo_manifiesto)
      ON DUPLICATE KEY UPDATE
         tipo_id = VALUES(tipo_id), nit = VALUES(nit),
+        rndc_username = VALUES(rndc_username), rndc_password = VALUES(rndc_password),
         razon_social = VALUES(razon_social), direccion = VALUES(direccion), telefono = VALUES(telefono),
         cod_municipio = VALUES(cod_municipio), municipio_nombre = VALUES(municipio_nombre),
         nro_poliza = VALUES(nro_poliza),
@@ -85,6 +91,8 @@ export async function guardar(datos: Partial<Empresa>): Promise<void> {
     {
       tipo_id: datos.tipo_id ?? 'N',
       nit: (datos.nit ?? '').toString().trim(),
+      rndc_username: str(datos.rndc_username),
+      rndc_password: str(datos.rndc_password),
       razon_social: str(datos.razon_social),
       direccion: str(datos.direccion),
       telefono: str(datos.telefono),

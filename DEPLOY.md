@@ -54,6 +54,7 @@ manifiestos, RNDC…) se preservan. Si es una instalación nueva:
    migracion_v29.sql  migracion_v30.sql
    migracion_v31_staff_users.sql   ← NUEVO (login del personal)
    migracion_v32_pdf_oficial.sql   ← NUEVO (plantilla PDF oficial)
+   migracion_v33_rndc_credenciales.sql   ← NUEVO (usuario/contraseña RNDC en maestro_empresa)
    ```
 
    Todas las migraciones usan `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF
@@ -132,9 +133,6 @@ DB_PASS=tu_clave
 DB_CHARSET=utf8mb4
 
 RNDC_AMBIENTE=pruebas           # cámbialo a produccion solo cuando ya probaste todo
-RNDC_USERNAME=...
-RNDC_PASSWORD=...
-RNDC_EMPRESA=...
 RNDC_HOST_OVERRIDE=
 RNDC_TIMEOUT=30
 
@@ -145,6 +143,13 @@ COLA_ENVIO_HABILITADO=false     # true SOLO cuando quieras enviar de verdad al R
 
 No definas `PORT` — Hostinger asigna uno y lo inyecta él solo; el backend ya
 lo lee de `process.env.PORT` vía `config()`.
+
+> **Usuario/contraseña RNDC y NIT ya no van aquí.** Se editan desde el
+> formulario **Empresa** (solo admin) una vez que la app está corriendo —
+> el NIT es el mismo campo "NIT \*" del formulario, y las credenciales se
+> guardan en `maestro_empresa` (columnas `rndc_username`/`rndc_password`,
+> migración v33). Solo hace falta importar esa migración y luego cargar los
+> datos desde la UI — no hay nada que poner en variables de entorno.
 
 Finaliza/guarda y lanza el deploy (o "Redesplegar" si ya existía).
 

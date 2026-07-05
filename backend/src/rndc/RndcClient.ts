@@ -21,6 +21,7 @@
 import iconv from 'iconv-lite';
 import { DOMParser } from '@xmldom/xmldom';
 import { config } from '../config/env.js';
+import { obtener as obtenerEmpresa } from '../modules/empresa/empresa.repo.js';
 import { RndcRespuesta, type RndcFila } from './RndcRespuesta.js';
 
 /** Scalar values accepted as RNDC variable values. */
@@ -56,11 +57,17 @@ export class RndcClient {
     private readonly timeout: number = 30,
   ) {}
 
-  static desdeConfig(): RndcClient {
+  /**
+   * Username/password come from maestro_empresa (editable in the "Empresa"
+   * form) rather than the environment — only ambiente/hostOverride/timeout
+   * stay deployment-level config.
+   */
+  static async desdeConfig(): Promise<RndcClient> {
     const cfg = config().rndc;
+    const empresa = await obtenerEmpresa();
     return new RndcClient(
-      cfg.username,
-      cfg.password,
+      empresa.rndc_username ?? '',
+      empresa.rndc_password ?? '',
       cfg.ambiente ?? 'pruebas',
       cfg.hostOverride ?? '',
       cfg.timeout ?? 30,

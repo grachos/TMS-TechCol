@@ -22,6 +22,7 @@ import { RndcClient, type RndcVars } from '../../rndc/RndcClient.js';
 import { RndcRespuesta } from '../../rndc/RndcRespuesta.js';
 import * as terceroRepo from '../terceros/tercero.repo.js';
 import * as vehiculoRepo from '../vehiculos/vehiculo.repo.js';
+import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
 
 type Queryable = Pool | PoolConnection;
 type Row = Record<string, any>;
@@ -154,11 +155,11 @@ export async function encolarCumplido(
   for (const rid of remesaIds) {
     const rem = await fila(conn, 'SELECT * FROM remesa WHERE id = ?', [rid]);
     if (rem === null) continue;
-    await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_remesa', rid, payloadCumplidoRemesa(rem));
+    await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_remesa', rid, await payloadCumplidoRemesa(rem));
   }
   const manif = await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
   if (manif !== null) {
-    await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_manifiesto', manifiestoId, payloadCumplidoManifiesto(manif));
+    await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_manifiesto', manifiestoId, await payloadCumplidoManifiesto(manif));
   }
 }
 
@@ -215,8 +216,8 @@ async function consultarSeguridadQr(manifiestoId: number): Promise<void> {
   try {
     const manif = await fila(db(), 'SELECT num_manifiesto FROM manifiesto WHERE id = ?', [manifiestoId]);
     if (!manif || !manif.num_manifiesto) return;
-    const rndc = RndcClient.desdeConfig();
-    const empresa = config().rndc.empresa ?? '';
+    const rndc = await RndcClient.desdeConfig();
+    const empresa = (await obtenerEmpresa()).nit ?? '';
     if (empresa === '') return;
     const qrResp = await rndc.consultar(
       4,
@@ -279,7 +280,7 @@ export interface DrenarResult {
 export async function drenar(): Promise<DrenarResult> {
   const habilitado = config().cola.envioHabilitado;
   const minutos = config().cola.minutosReintento;
-  const rndc = RndcClient.desdeConfig();
+  const rndc = await RndcClient.desdeConfig();
 
   const [pendientes] = await db().query<RowDataPacket[]>(
     `SELECT * FROM cola_envios
@@ -322,7 +323,7 @@ export interface ItemResult {
 export async function procesarItem(colaId: number): Promise<ItemResult> {
   const habilitado = config().cola.envioHabilitado;
   const minutos = config().cola.minutosReintento;
-  const rndc = RndcClient.desdeConfig();
+  const rndc = await RndcClient.desdeConfig();
 
   const row = await fila(db(), 'SELECT * FROM cola_envios WHERE id = ?', [colaId]);
   if (!row) return { ok: false, mensaje: `Item #${colaId} no encontrado.` };
@@ -351,7 +352,7 @@ export async function procesarItem(colaId: number): Promise<ItemResult> {
 export async function procesarDespacho(manifiestoId: number): Promise<ItemResult> {
   const habilitado = config().cola.envioHabilitado;
   const minutos = config().cola.minutosReintento;
-  const rndc = RndcClient.desdeConfig();
+  const rndc = await RndcClient.desdeConfig();
   let enviados = 0;
   let errores = 0;
 
@@ -391,7 +392,7 @@ async function sedeTercero(conn: Queryable, tipo: unknown, numero: unknown): Pro
 /** Port of payloadRemesa(). Exported for real-data parity checks. */
 export async function payloadRemesa(r: Row, conn: Queryable): Promise<string> {
   const vars: RndcVars = {
-    NUMNITEMPRESATRANSPORTE: config().rndc.empresa,
+    NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     consecutivoRemesa: String(parseInt(String(r.num_remesa ?? '0').replace(/[^0-9]/g, '') || '0', 10)).padStart(10, '0'),
     codOperacionTransporte: r.operacion_transporte,
     codTipoEmpaque: r.tipo_empaque || '0',
@@ -442,7 +443,7 @@ export async function payloadManifiesto(m: Row, conn: Queryable): Promise<string
   }
 
   const vars: RndcVars = {
-    NUMNITEMPRESATRANSPORTE: config().rndc.empresa,
+    NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     NUMMANIFIESTOCARGA: m.num_manifiesto,
     CODOPERACIONTRANSPORTE: m.operacion_transporte,
     FECHAEXPEDICIONMANIFIESTO: fecha(m.fecha_expedicion),
@@ -492,9 +493,9 @@ export async function payloadManifiesto(m: Row, conn: Queryable): Promise<string
 }
 
 /** Port of payloadCumplidoRemesa(). */
-function payloadCumplidoRemesa(r: Row): string {
+async function payloadCumplidoRemesa(r: Row): Promise<string> {
   const vars: RndcVars = {
-    NUMNITEMPRESATRANSPORTE: config().rndc.empresa,
+    NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     NUMMANIFIESTOCARGA: r.num_manifiesto ?? '',
     CONSECUTIVOREMESA: RndcClient.escaparXml(String(r.num_remesa ?? '')),
     TIPOCUMPLIDOREMESA: r.cumplido_tipo ?? 'C',
@@ -523,9 +524,9 @@ function payloadCumplidoRemesa(r: Row): string {
 }
 
 /** Port of payloadCumplidoManifiesto(). */
-function payloadCumplidoManifiesto(m: Row): string {
+async function payloadCumplidoManifiesto(m: Row): Promise<string> {
   const vars: RndcVars = {
-    NUMNITEMPRESATRANSPORTE: config().rndc.empresa,
+    NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     NUMMANIFIESTOCARGA: m.num_manifiesto,
     NOMTIPOCUMPLIDOMANIFIESTO: m.cumplido_tipo ?? 'C',
     FECHAENTREGADOCUMENTOS: fecha(m.fecha_entrega_documentos),
@@ -578,7 +579,7 @@ export async function xmlDe(colaId: number): Promise<{ found: boolean; text: str
   if (!f) return { found: false, text: 'No encontrado.' };
   let text = '';
   try {
-    const rndc = RndcClient.desdeConfig();
+    const rndc = await RndcClient.desdeConfig();
     text = '=== PREVISUALIZACIÓN XML ===\n\n' + rndc.previewXmlInterno(Number(f.proceso_rndc), String(f.payload_xml));
   } catch {
     text = '(Fragmento <variables>):\n' + String(f.payload_xml);

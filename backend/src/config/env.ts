@@ -50,9 +50,6 @@ export interface AppConfig {
   db: { host: string; port: number; name: string; user: string; pass: string; charset: string };
   rndc: {
     ambiente: string;
-    username: string;
-    password: string;
-    empresa: string;
     hostOverride: string;
     timeout: number;
   };
@@ -90,9 +87,6 @@ export function config(): AppConfig {
     rndc: {
       // 'pruebas' (servidor rndc) o 'produccion' (rndcws/rndcws2/plc).
       ambiente: str('RNDC_AMBIENTE', 'pruebas'),
-      username: str('RNDC_USERNAME', ''),
-      password: str('RNDC_PASSWORD', ''),
-      empresa: str('RNDC_EMPRESA', ''),
       hostOverride: str('RNDC_HOST_OVERRIDE', ''),
       timeout: int('RNDC_TIMEOUT', 30),
     },

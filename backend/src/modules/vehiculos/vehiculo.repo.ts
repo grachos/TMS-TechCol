@@ -6,10 +6,10 @@
 
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { db } from '../../db/pool.js';
-import { config } from '../../config/env.js';
 import { RndcClient } from '../../rndc/RndcClient.js';
 import { RndcRespuesta } from '../../rndc/RndcRespuesta.js';
 import type { Vehiculo, VehiculoListRow, Paginated } from '../../db/types.js';
+import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
 
 const CAMPOS = [
   'placa', 'cod_configuracion', 'marca', 'peso_vacio', 'peso_vacio_remolque', 'remolque_placa',
@@ -140,9 +140,9 @@ export async function registrarEnRndc(id: number): Promise<RndcRespuesta> {
   const v = await obtener(id);
   if (v === null) return RndcRespuesta.fallo('Vehículo no encontrado.', 0, '');
 
-  const rndc = RndcClient.desdeConfig();
+  const rndc = await RndcClient.desdeConfig();
   const vars = {
-    NUMNITEMPRESATRANSPORTE: config().rndc.empresa,
+    NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     NUMPLACA: v.placa,
     CODCONFIGURACIONUNIDADCARGA: v.cod_configuracion,
     PESOVEHICULOVACIO: v.peso_vacio,
