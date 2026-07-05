@@ -6,6 +6,9 @@
  * router; this file mounts them under /api.
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import express from 'express';
 import cors from 'cors';
 import { config } from './config/env.js';
@@ -67,6 +70,22 @@ export function createApp() {
 
   // 404 for anything under /api we didn't handle.
   app.use('/api', (_req, _res, next) => next(notFound('Ruta no encontrada.')));
+
+  // --- Static frontend (production single-deploy) ---
+  // Hosts like Hostinger's GitHub-import Node.js app deploy one process for the
+  // whole repo; serving the built SPA here keeps frontend + API on one origin,
+  // which the frontend's fetch client requires (it only ever calls relative
+  // `/api/...` paths — see frontend/src/lib/api.ts). No-op if the frontend
+  // wasn't built (e.g. local `npm run dev`, which uses Vite's own server).
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
+  if (existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+  }
 
   app.use(errorMiddleware);
   return app;

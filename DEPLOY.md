@@ -68,138 +68,107 @@ manifiestos, RNDC…) se preservan. Si es una instalación nueva:
 
 ---
 
-## 2. Trae el código al servidor
+## 2. Importa el repo desde GitHub (un solo deploy para todo)
 
-Igual que antes, usando el **Git de hPanel**:
+Hostinger ofrece dos maneras distintas de desplegar Node — cuál ves depende
+de tu plan/cuenta:
 
-1. hPanel → **Sitios web → Administrar → (Avanzado) Git**.
-2. **Crear un nuevo repositorio**:
-   - **Repository**: `https://github.com/grachos/TMS-TechCol.git`
-   - **Branch**: `main`
-   - **Directory**: una carpeta fuera de cualquier `public_html` servido
-     directamente (ej. `tms-light-new`) — el código fuente de `backend/` NO
-     debe quedar accesible por HTTP.
-3. Activa **Auto Deployment** y copia el Webhook URL → GitHub → repo
-   **Settings → Webhooks → Add webhook** (Payload URL = el webhook de
-   Hostinger, Content type `application/json`, evento `push`). Desde ahora
-   cada `git push origin main` trae los cambios solo.
+- **Flujo nuevo tipo "Import from GitHub"** (el que probablemente tienes):
+  una pantalla de una sola app con **Rama**, **Versión de Node**,
+  **Directorio raíz**, **Comando de compilación / Directorio de salida /
+  Archivo de entrada**, y **Variables de entorno**. Es del estilo
+  Vercel/Netlify: un repo → un proceso Node.
+- **Flujo clásico de hPanel** (`Avanzado → Git` + `Node.js` por separado):
+  el de la app PHP original.
 
----
+Esta guía usa el flujo nuevo porque es monorepo-friendly con un solo truco:
+como `backend/` y `frontend/` son dos paquetes npm separados, y el cliente
+HTTP del frontend (`frontend/src/lib/api.ts`) **siempre llama a rutas
+relativas `/api/...` del mismo origen** (no hay forma de apuntar a otro
+host sin tocar código), la solución más simple es que **el propio backend
+Express sirva también el frontend ya compilado** — así todo queda en un
+solo proceso, un solo dominio, cero problemas de CORS. Esto ya está resuelto
+en el código (`backend/src/app.ts` sirve `frontend/dist/` estático + hace
+fallback a `index.html` para las rutas de React Router, si esa carpeta
+existe en el build).
 
-## 3. Backend: Node.js App en hPanel
+Al conectar el repo (`https://github.com/grachos/TMS-TechCol`, rama `main`),
+configura:
 
-1. hPanel → **Node.js** → **Crear aplicación**:
-   - **Node.js version**: 20 (o la mayor disponible ≥ 20 — es el mínimo del
-     `engines` del backend).
-   - **Application root**: `tms-light-new/backend` (dentro de la carpeta
-     donde Git clonó el repo).
-   - **Application URL**: el dominio/subdominio que vayas a usar, con
-     **path `/api`** — por ejemplo `tms.tudominio.com/api`. Esto es clave:
-     el frontend siempre llama a rutas relativas `/api/...` del **mismo
-     origen**, así que el backend debe quedar montado bajo `/api` del mismo
-     dominio que sirve el frontend (ver paso 4). Si tu panel no permite un
-     path y solo dominios completos, usa un subdominio dedicado solo para
-     la API (ej. `api.tudominio.com`) y ajusta `CORS_ORIGINS` +la URL base
-     del frontend (ver nota al final).
-   - **Application startup file**: `dist/server.js`.
-2. **Variables de entorno** (sección "Environment variables" de la app
-   Node, o crea un `backend/.env` por File Manager/SSH — el backend lee
-   ambos):
+| Campo | Valor |
+|---|---|
+| **Directorio raíz** | `.` (la raíz del repo, **no** `backend`) |
+| **Comando de compilación** | `npm run build` (el de la raíz — compila backend Y frontend en un solo paso: `npm --prefix backend run build && npm --prefix frontend run build`) |
+| **Gestor de paquetes** | `npm` |
+| **Directorio de salida** | `backend/dist` |
+| **Archivo de entrada** | `backend/dist/server.js` |
+| **Versión de Node** | 20.x (el backend requiere ≥ 20) |
 
-   ```env
-   APP_ENV=produccion
-   APP_DEBUG=false
-   PORT=4000                      # Hostinger lo re-mapea internamente, no lo cambies
-   CORS_ORIGINS=https://tms.tudominio.com
-
-   JWT_SECRET=<genera-uno-largo-y-aleatorio>
-   JWT_EXPIRES=8h
-
-   DB_HOST=localhost
-   DB_PORT=3306
-   DB_NAME=uXXXX_light_tms
-   DB_USER=uXXXX_usuario
-   DB_PASS=tu_clave
-   DB_CHARSET=utf8mb4
-
-   RNDC_AMBIENTE=pruebas          # cámbialo a produccion solo cuando ya probaste todo
-   RNDC_USERNAME=...
-   RNDC_PASSWORD=...
-   RNDC_EMPRESA=...
-   RNDC_HOST_OVERRIDE=
-   RNDC_TIMEOUT=30
-
-   COLA_MAX_INTENTOS=10
-   COLA_MINUTOS_REINTENTO=15
-   COLA_ENVIO_HABILITADO=false    # true SOLO cuando quieras enviar de verdad al RNDC
-   ```
-
-   > **No subas `.env` a GitHub.** No está trackeado (ver `.gitignore`);
-   > créalo una vez en el servidor y persiste entre despliegues.
-
-3. Abre una terminal SSH (hPanel suele ofrecer un botón "Run NPM Install" o
-   una terminal integrada en la pantalla de la app Node) y ejecuta, desde
-   `tms-light-new/backend`:
-
-   ```bash
-   npm install
-   npm run build          # compila TypeScript a dist/ + copia assets de PDF
-   npm run seed:admin -- --email admin@tudominio.com --password "CAMBIA-ESTO" --nombre "Admin"
-   ```
-
-4. **Reinicia la app Node** desde hPanel para que tome `dist/server.js`.
-5. Prueba: `https://tms.tudominio.com/api/health` debe responder
-   `{"ok":true,"database":true}`.
+> Ojo con el **Directorio de salida** y el **Archivo de entrada**: como el
+> directorio raíz es `.` (todo el repo), las rutas son relativas a la raíz,
+> no a `backend/` — por eso llevan el prefijo `backend/`. Si los dejas como
+> `dist` y `dist/server.js` a secas, el deploy falla porque esos paths no
+> existen en la raíz del repo.
 
 ---
 
-## 4. Frontend: build estático
+## 3. Variables de entorno
 
-El frontend **no corre en Node en producción** — se compila a archivos
-estáticos y Hostinger los sirve directamente (más rápido y no consume el
-cupo de la app Node).
+En la sección **"Variables de entorno"** de esa misma pantalla, agrega:
 
-1. Local (o en la terminal SSH del servidor, dentro de
-   `tms-light-new/frontend`):
+```env
+APP_ENV=produccion
+APP_DEBUG=false
+CORS_ORIGINS=*                 # no hace falta restringirlo — front y API comparten origen
 
-   ```bash
-   npm install
-   npm run build     # genera frontend/dist/
-   ```
+JWT_SECRET=<genera-uno-largo-y-aleatorio>
+JWT_EXPIRES=8h
 
-2. Copia el **contenido** de `frontend/dist/` (no la carpeta en sí) a la
-   raíz pública del dominio/subdominio elegido (`tms.tudominio.com` →
-   normalmente `domains/tudominio.com/tms/` o el `public_html` del
-   subdominio, según cómo lo hayas creado en **Dominios → Subdominios**).
-   Vía File Manager (subir el zip de `dist/` y extraer ahí) o SFTP.
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=uXXXX_light_tms
+DB_USER=uXXXX_usuario
+DB_PASS=tu_clave
+DB_CHARSET=utf8mb4
 
-3. Como es una SPA con rutas de React Router, agrega un `.htaccess` en esa
-   misma carpeta pública para que cualquier ruta que no sea un archivo real
-   ni empiece por `/api` caiga en `index.html`:
+RNDC_AMBIENTE=pruebas           # cámbialo a produccion solo cuando ya probaste todo
+RNDC_USERNAME=...
+RNDC_PASSWORD=...
+RNDC_EMPRESA=...
+RNDC_HOST_OVERRIDE=
+RNDC_TIMEOUT=30
 
-   ```apache
-   <IfModule mod_rewrite.c>
-     RewriteEngine On
-     RewriteCond %{REQUEST_FILENAME} !-f
-     RewriteCond %{REQUEST_FILENAME} !-d
-     RewriteCond %{REQUEST_URI} !^/api/
-     RewriteRule ^ index.html [L]
-   </IfModule>
-   ```
+COLA_MAX_INTENTOS=10
+COLA_MINUTOS_REINTENTO=15
+COLA_ENVIO_HABILITADO=false     # true SOLO cuando quieras enviar de verdad al RNDC
+```
 
-4. Verifica que la app Node del paso 3 quede **bajo el mismo dominio, en
-   `/api`** (Passenger/LiteSpeed reenvía esas rutas al proceso Node; todo lo
-   demás lo sirve el Apache/LiteSpeed estático). Así el fetch relativo
-   `/api/...` del frontend llega al backend sin problemas de CORS.
+No definas `PORT` — Hostinger asigna uno y lo inyecta él solo; el backend ya
+lo lee de `process.env.PORT` vía `config()`.
 
-   > Si tu plan no soporta montar la app Node en un path (`/api`) del mismo
-   > dominio y tuviste que usar un subdominio aparte para la API (ej.
-   > `api.tudominio.com`), el cliente HTTP del frontend (`frontend/src/lib/api.ts`)
-   > **siempre llama a rutas relativas del mismo origen** — no hay variable de
-   > entorno para apuntar a otro host. En ese caso hace falta un cambio de
-   > código (agregar una `VITE_API_BASE_URL` y usarla en `buildUrl()`) antes
-   > de desplegar con dominios separados. Aplica solo si el path `/api` no es
-   > viable en tu plan.
+Finaliza/guarda y lanza el deploy (o "Redesplegar" si ya existía).
+
+---
+
+## 4. Primer arranque: crear el admin
+
+Una vez el deploy termina en verde, necesitas correr `seed:admin` una vez.
+Si el panel te da una terminal (revisa si hay un botón de shell/consola en
+la pantalla de la app, o **Avanzado → SSH Access** en hPanel clásico):
+
+```bash
+cd <ruta-de-tu-app>          # la misma que "Directorio raíz" del deploy
+npm --prefix backend run seed:admin -- --email admin@tudominio.com --password "CAMBIA-ESTO" --nombre "Admin"
+```
+
+Si no tienes shell, dilo — hay una alternativa (endpoint temporal o
+`INSERT` directo por phpMyAdmin con un hash bcrypt) pero preferí siempre
+la vía del script porque hashea la contraseña correctamente.
+
+Prueba:
+- `https://<tu-dominio-asignado>/api/health` → `{"ok":true,"database":{"ok":true}}`
+- `https://<tu-dominio-asignado>/` → la pantalla de login de React (ya no
+  "Cannot GET /").
 
 ---
 
@@ -209,18 +178,18 @@ Reemplaza al cron de `legacy/cron/retry_worker.php`. hPanel → **Avanzado →
 Trabajos Cron**, cada 15 minutos:
 
 ```
-*/15 * * * * cd /home/uXXXX/domains/tudominio.com/tms-light-new/backend && /ruta/al/node dist/queue/worker.js >> /home/uXXXX/logs/tms-worker.log 2>&1
+*/15 * * * * cd <ruta-de-tu-app> && <ruta-al-node> backend/dist/queue/worker.js >> <ruta-a-tus-logs>/tms-worker.log 2>&1
 ```
 
-La ruta exacta del binario `node` la ves en la pantalla de la app Node de
-hPanel (algo como `/home/uXXXX/nodevenv/tms-light-new/backend/20/bin/node`).
-Compílalo antes con `npm run build` (mismo `dist/` que usa la app web).
+La ruta exacta del binario `node` para ese Node.js version la ves en la
+pantalla de la app (o en `Avanzado → SSH Access`, corriendo `which node`).
 
 ---
 
 ## 6. Checklist post-despliegue
 
-- [ ] `GET /api/health` responde `{"ok":true,"database":true}`.
+- [ ] `GET /api/health` responde `{"ok":true,"database":{"ok":true}}`.
+- [ ] `/` sirve la pantalla de login de React (no "Cannot GET /").
 - [ ] Login con el usuario creado por `seed:admin` funciona.
 - [ ] `COLA_ENVIO_HABILITADO=false` mientras pruebas — la cola arma y
       previsualiza el XML pero no envía nada real al RNDC.
@@ -238,19 +207,14 @@ Compílalo antes con `npm run build` (mismo `dist/` que usa la app web).
 ```
 editar en local  →  git add/commit  →  git push origin main
                                             │
-                       (webhook)            ▼
-                              Hostinger hace pull del código
-                                            │
-                     (manual, por ahora)    ▼
-        SSH: npm install && npm run build (backend y/o frontend)
-                                            │
                                             ▼
-                   Reiniciar la app Node desde hPanel si tocaste backend
+                Hostinger detecta el push y corre el pipeline solo:
+                git pull → npm install (raíz) → npm run build
+                (backend + frontend) → reinicia el proceso Node
 ```
 
-> A diferencia de la app PHP, el build de TypeScript/Vite **no es
-> automático** con solo el `git pull` del webhook — hace falta correr
-> `npm run build` tras cada despliegue que toque `backend/` o `frontend/`.
-> Si quieres automatizarlo del todo, hPanel permite configurar un
-> **Deployment script** en la pantalla Git que corra esos comandos después
-> del pull.
+Con el flujo "Import from GitHub", el build y el reinicio **son
+automáticos** en cada push a `main` — a diferencia del hPanel clásico
+(Git + Node.js App por separado), donde sí haría falta un paso manual de
+`npm run build` + reinicio. Si tu deploy no se dispara solo, revisa que el
+webhook/auto-deploy esté activado en la pantalla de la app.
