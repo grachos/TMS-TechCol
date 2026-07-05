@@ -1,310 +1,240 @@
 # Light TMS
 
-Mini TMS (Transport Management System) para Colombia con capa **store-and-forward**
-hacia el **RNDC** (Registro Nacional de Despachos de Carga). Cuando el web service del
-RNDC está caído, la información se guarda localmente y se reenvía cuando vuelve a estar
-disponible.
+> Colombian freight **Transport Management System** (TMS) that captures service
+> requests, seeds the corresponding **Manifiesto** and **Remesas**, and files them
+> with the **RNDC** — the *Registro Nacional de Despachos de Carga* SOAP web
+> service of the Ministerio de Transporte — through a resilient store‑and‑forward
+> queue. Includes fulfilment (*cumplido*), printable manifiesto/remesa PDFs with
+> the RNDC QR, a dashboard, and a filterable CSV report.
 
-## Concepto central
+This repository holds the **modern rewrite** of an original PHP/MySQL application.
+The legacy PHP app is preserved under [`/legacy`](legacy/) as the reference of
+truth until parity is signed off.
 
-La **Solicitud de Servicio** se captura **una sola vez**. Al **confirmar el despacho**
-se siembran automáticamente la **Remesa** y el **Manifiesto** por cada vehículo
-despachado y se encolan para envío al RNDC. El usuario no crea esos documentos por separado.
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 18 · TypeScript · Vite · TailwindCSS · Recharts · Zustand · Lucide · React‑Leaflet |
+| **Backend** | Node.js · Express · TypeScript · mysql2 (typed query modules, no ORM) · Zod |
+| **Auth** | JWT for staff · roles `admin` / `operador` |
+| **Docs / PDF** | puppeteer‑core (system Chrome) → PDF, with printable‑HTML fallback · `qrcode` |
 
-Los datos de mercancía peligrosa (`codigo_un`, `estado_producto`) se heredan del
-catálogo de **Producto** — no se editan en la solicitud. Si la naturaleza es peligrosa,
-el sistema valida que el producto tenga esos campos antes de permitir guardar.
+---
 
-## Stack
+## Table of contents
+- [Project structure](#project-structure)
+- [Domain model & data flow](#domain-model--data-flow)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Setup & run](#setup--run)
+- [Scripts](#scripts)
+- [Configuration (`.env`)](#configuration-env)
+- [API overview](#api-overview)
+- [Authentication & roles](#authentication--roles)
+- [Safety switch (RNDC sending)](#safety-switch-rndc-sending)
+- [Testing & parity](#testing--parity)
+- [Migration notes](#migration-notes-php--nodejs)
 
-Pensado para **hosting web/cloud de Hostinger** (LAMP administrado):
+---
 
-- **PHP 8.x** (sin Composer; se sube por FTP/File Manager)
-- **MariaDB** (compatible MySQL), administrada con **phpMyAdmin**
-- Cliente RNDC en PHP (SOAP/XML)
-- **Cron job** de Hostinger para el worker de reintento
-- Sin autenticación ni CSRF (gaps conocidos, no abordados aún)
-
-## Estructura
+## Project structure
 
 ```
-light-tms/
-├── public/                  <- document root del dominio
-│   ├── index.php            front-controller (ruteo via ?r=)
-│   └── assets/
-│       ├── css/styles.css
-│       └── js/app.js        autocompletado, mapa, cálculos
-├── src/
-│   ├── config.php           carga .env + config()
-│   ├── db.php               conexión PDO a MariaDB
-│   ├── vista.php            layout + helpers (nav con dropdowns)
-│   ├── helpers.php          utilidades (e(), validarProductoPeligrosa())
-│   ├── Maestro/             repositorios (Empresa, Tercero, Vehículo, Municipio, Catálogo)
-│   ├── Solicitud/           SolicitudRepo (captura única → confirmarDespacho → siembra remesa+manifiesto)
-│   ├── Despacho/            ColaRepo (store-and-forward, payload XML)
-│   ├── Rndc/                Diccionario, RndcClient (SOAP/XML), RenderVariables
-│   └── vistas/              templates PHP (solicitud, cola, empresa, etc.)
-├── cron/
-│   └── retry_worker.php     worker store-and-forward (Fase 4)
-├── sql/
-│   ├── schema.sql           tablas base
-│   ├── catalogos.sql        catálogos (empaque, carrocería, config vehicular, producto, errores RNDC)
-│   ├── importar_productos_csv.php  importa catálogo de productos desde CSV oficial del RNDC
-│   ├── municipios.sql       DIVIPOLA
-│   ├── maestros.sql         tercero + vehículo
-│   ├── catalogo_configuracion.sql  configuraciones de unidad de carga
-│   └── migracion_v*.sql     migraciones incrementales (v2–v30)
-├── .env.example
-└── README.md
+tms-light-new/
+├── .github/workflows/ci.yml      # CI: typecheck + test + build
+├── backend/                      # Node + Express + TS API  →  http://localhost:4000
+│   ├── src/
+│   │   ├── config/env.ts         # typed .env loader
+│   │   ├── db/pool.ts, types.ts  # mysql2 pool + transactions, row types
+│   │   ├── http/errors.ts        # AppError + asyncHandler + error middleware
+│   │   ├── util/                 # csv, validaciones (peligrosa)
+│   │   ├── rndc/                 # RNDC SOAP client (ISO‑8859‑1) + RndcRespuesta
+│   │   ├── modules/
+│   │   │   ├── auth/             # JWT, roles, staff_users
+│   │   │   ├── terceros/  vehiculos/  municipios/  catalogos/  empresa/
+│   │   │   ├── solicitudes/      # seed manifiesto + remesas, retentions
+│   │   │   ├── cola/             # store‑and‑forward queue + cumplido + despachos
+│   │   │   ├── pdf/              # manifiesto/remesa HTML + QR + render
+│   │   │   ├── stats/            # dashboard aggregates
+│   │   │   └── informe/          # filterable report + CSV
+│   │   ├── queue/worker.ts       # cron drain of the queue
+│   │   └── scripts/seed-admin.ts
+│   └── test/                     # RNDC + QR characterization tests (Vitest)
+├── frontend/                     # React + Vite SPA  →  http://localhost:5173
+│   └── src/
+│       ├── pages/                # login, inicio, terceros, vehiculos, productos,
+│       │                         # empresa, solicitudes, despachos, cola, cumplido, informe
+│       ├── components/           # Autocomplete, MunicipioAutocomplete, MapPicker,
+│       │                         # Pagination, Alert, StatusBadge, AppShell, ProtectedRoute
+│       ├── store/auth.ts         # Zustand (persisted JWT)
+│       └── lib/                  # api client (+ authed file download), format helpers
+├── database/                     # schema.sql, maestros, catalogos, municipios (DANE),
+│                                 # migraciones v2..v31 (v31 = staff_users)
+├── docs/                         # RNDC guides + MODERNIZACION.md
+├── legacy/                       # original PHP app (kept for reference)
+└── package.json                  # npm workspaces: [backend, frontend]
 ```
 
-## Modelo de datos
+## Domain model & data flow
 
-- `solicitud_servicio` — captura única (siembra manifiesto + remesas)
-- `manifiesto` — documento RNDC (ManifiestoCarga), uno por despacho
-- `remesa` — documento RNDC (RemesaTerrestreCarga), N por manifiesto vía `manifiesto_remesa`
-- `cola_envios` — bandeja store-and-forward (estado: pendiente / enviando / enviado / error)
+```
+Solicitud de servicio  (single capture)
+        │  confirmar despacho  (transaction)
+        ▼
+   1 Manifiesto  +  N Remesas   ── linked via manifiesto_remesa
+        │  encolar in RNDC order
+        ▼
+   cola_envios:  tercero(11) → vehículo(12) → remesa(3) → manifiesto(4)
+        │  worker drains (dependency‑gated, retry+backoff, safe‑mode aware)
+        ▼
+   RNDC accepts → manifiesto 'aceptado' → fetch QR seguridad
+        │  later
+        ▼
+   Cumplido:  cumplido_remesa(5) → cumplido_manifiesto(6)
+```
 
-Los campos llevan en comentarios SQL su variable oficial del RNDC entre `[corchetes]`.
+- **One capture seeds everything.** A `Solicitud` is entered once; confirming its
+  dispatch seeds a manifiesto and one remesa per product, computes retentions
+  server‑side (`retencion_ica = flete·tarifa/1000`, `retencion_fuente = 1%`,
+  `fopat = 0.1%`), and reserves company consecutivos (`REM-…` / `MAN-…`).
+- **Store‑and‑forward.** Documents are enqueued in the strict RNDC order and sent
+  by a worker that respects dependencies and retries with backoff — the app stays
+  usable even when the RNDC is down.
 
-## Puesta en marcha (local)
+## Features
 
-1. Copia `.env.example` a `.env` y completa los datos de la BD.
-2. Crea la base de datos e importa, en orden, los SQL de `sql/`:
+**Maestros** — Terceros (full name = *nombre + apellidos*, DIVIPOLA municipio picker,
+lat/long map, RNDC registration), Vehículos (config, tenedor/propietario/conductor
+pickers), Municipios (DIVIPOLA search shown as `nombre – nombre_mpio, departamento`),
+Productos/Catálogos (empaque, carrocería, configuración), Empresa (NIT, póliza,
+EMF, consecutivos).
 
-   | Orden | Archivo | Descripción |
-   |-------|---------|-------------|
-   | 1 | `schema.sql` | Tablas base (solicitud, remesa, manifiesto, cola) |
-    | 2 | `municipios.sql` | Catálogo DIVIPOLA completo: 7845 registros (municipios + corregimientos) |
-   | 3 | `maestros.sql` | Tercero y Vehículo |
-   | 4 | `catalogos.sql` | Catálogos (empaque, carrocería, producto — estructura, errores RNDC) |
-   | 5 | `catalogo_configuracion.sql` | Configuraciones de unidad de carga |
-   | 6 | `importar_productos_csv.php` | **Importar catálogo de productos** desde CSV oficial del RNDC |
-   | 7 | `migracion_v2.sql` | Primeros ajustes de esquema |
-   | 8 | `migracion_v3.sql` | Campos de despacho, maestro_empresa, retenciones |
-   | 9 | `migracion_v4.sql` | Vehículo: solo requeridos + remolque |
-   | 10 | `migracion_v5.sql` | Quita marca/modelo del vehículo |
-   | 11 | `migracion_v6.sql` | Estado `despachada` en solicitud |
-   | 12 | `migracion_v7.sql` | Cola de envíos ligada a solicitud |
-   | 13 | `migracion_v8.sql` | Tiempo pactado cargue |
-   | 14 | `migracion_v9.sql` | Elimina `REMDUENOPOLIZA` (`tomador_poliza`) |
-   | 15 | `migracion_v10.sql` | Consecutivos `consecutivo_remesa`, `consecutivo_manifiesto` en empresa |
-   | 16 | `migracion_v11.sql` | `radicado_remesa` en empresa |
-    | 17 | `migracion_v12.sql` | **Reestructura tabla `producto`** con columnas del CSV oficial RNDC |
-    | 18 | `migracion_v13.sql` | `dueno_poliza` en solicitud_servicio y remesa |
-    | 19 | `migracion_v14.sql` | `conductor_tipo_id`, `conductor_num_id` en vehiculo (conductor por defecto) |
-    | 20 | `migracion_v15.sql` | `consecutivo_remesa`, `consecutivo_manifiesto` pasan a VARCHAR, se elimina `radicado_remesa` |
-    | 21 | `migracion_v16.sql` | Renombra `titular_*` → `generador_*` en solicitud_servicio |
-    | 22 | `migracion_v17.sql` | Elimina columnas innecesarias de solicitud_servicio |
-    | 23 | `migracion_v18.sql` | Agrega `peso` a remesa |
-    | 24 | `migracion_v19_municipios.sql` | Reemplaza datos de municipio con DIVIPOLA actualizado (7845 registros, incluye corregimientos) |
-    | 25 | `migracion_v20.sql` | Elimina `valor_anticipo` de solicitud_servicio (se conserva en manifiesto) |
-    | 26 | `migracion_v21.sql` | Renombra `cantidad_cargada` → `cantidad_vehiculos` en solicitud_servicio. Soporta multi-despacho con contador decremental. |
-    | 27 | `migracion_v22.sql` | Agrega `emf` (NIT Empresa Monitoreo Flota) a maestro_empresa, solicitud_servicio y manifiesto. |
-    | 28 | `migracion_v23.sql` | Agrega `codigo_un` + `estado_producto` a producto, solicitud_servicio y remesa para mercancía peligrosa. |
-    | 29 | `migracion_v24.sql` | Agrega `remesa_id` a cola_envios para procesar despachos individualmente. |
-| 30 | `migracion_v25.sql` | Agrega `remesa_id` a manifiesto para vincular remesa ↔ manifiesto. |
-| 31 | `migracion_v26.sql` | Elimina `codigo_un` y `estado_producto` de solicitud_servicio (se heredan de producto). |
-| 32 | `migracion_v27.sql` | Agrega `seguridadqr` a manifiesto; se consulta tras aceptación RNDC. |
-| 33 | `migracion_v28.sql` | Crea `manifiesto_remesa` (1:N remesa↔manifiesto), agrega `valor_mercancia` a remesa, `manifiesto_id` a cola_envios. |
-| 34 | `migracion_v29.sql` | Back-fill de `cola_envios.manifiesto_id` para filas existentes. |
-| 35 | `migracion_v30.sql` | Columnas de cumplido en `remesa` y `manifiesto` (procesoid 5 y 6). |
+**Operación** — Solicitudes (list / create / edit / detail), **Confirmar despacho**
+(multi‑remesa, vehicle → conductor + tenedor autofill), **Despachos** list,
+**Cola** monitor (safe‑mode banner, per‑row XML preview, "procesar"), **Cumplido**
+(per‑remesa + manifiesto), all wired to the RNDC pipeline.
 
-   > La migración v12 reemplaza la tabla `producto` completa. Después de ejecutarla,
-   > corre el script `importar_productos_csv.php` para poblar los 3758 productos desde
-   > el archivo `Maestro_Codificación de Productos_RNDC.csv`:
-   > ```bash
-   > php sql/importar_productos_csv.php /ruta/al/Maestro_Codificación_de_Productos_RNDC.csv
-   > ```
+**Documents** — Manifiesto & Remesa **PDFs** rendered from the ported templates,
+with the **RNDC QR** (structured MEC text) and the *seguridad* code; falls back to
+printable HTML when no browser is available.
 
-3. Sirve la carpeta `public/`:
-   ```bash
-   php -S localhost:8000 -t public
-   ```
-4. Abre <http://localhost:8000> — el tablero debe mostrar "Base de datos conectada".
+**Insights** — **Dashboard** (Recharts: queue by status, dispatches over time,
+solicitudes by status + KPIs) and **Informe** — a filterable report at two levels
+(**per‑remesa detail** / **per‑manifiesto summary**) downloadable as **CSV**, with
+filters for text, remesa/manifiesto number, status, client and despacho date range;
+columns include IDs, statuses, dates, cliente, conductor, tenedor, peso, flete and
+retentions.
 
-## Despliegue en Hostinger
+**Guardrails** — Dangerous‑goods check: choosing *Carga peligrosa* with a product
+missing **Código UN / Estado** warns immediately and blocks saving (enforced again
+on the server). Real RNDC sends are `admin`‑only and gated by the safety switch.
 
-1. En hPanel crea una **base de datos MySQL** y un usuario; anota host, nombre, usuario y clave.
-2. Importa `sql/schema.sql` desde **phpMyAdmin**.
-3. Sube los archivos por **File Manager / FTP** (p. ej. a `domains/TU_DOMINIO/light-tms`).
-4. Apunta el **document root** del dominio/subdominio a la carpeta `public/`
-   (hPanel > Avanzado > Document root). Así `src/`, `cron/` y `.env` quedan fuera de la web.
-5. Crea el archivo `.env` en el servidor con las credenciales reales.
-6. Configura un **Cron Job** (Fase 4):
-   ```
-   */15 * * * * /usr/bin/php /home/USUARIO/domains/TU_DOMINIO/light-tms/cron/retry_worker.php
-   ```
+## Requirements
 
-## Estado
+- **Node ≥ 20** and npm
+- **MySQL / MariaDB** with the schema in [`database/`](database/)
+- *(Optional, for PDF)* **Google Chrome or Edge** installed — the backend renders
+  PDFs via the system browser (`puppeteer-core`); without one it serves printable HTML.
 
-- [x] **Fase 1** — Esqueleto + esquema de BD
-- [x] **Fase 2** — Cliente RNDC (SOAP/XML + `<acceso>`) — ver [docs/RNDC.md](docs/RNDC.md)
-- [x] **Fase 3** — Flujo Solicitud de Servicio (captura única → siembra Manifiesto + Remesa)
-- [x] **Fase 4** — Confirmar despacho → cola store-and-forward → worker de envío al RNDC
-- [x] **Correcciones post-integración RNDC:**
-  - Eliminado `REMDUENOPOLIZA` (`tomador_poliza`) del XML, BD, formulario y diccionario (v9)
-  - Corregido error REM020: `CONSECUTIVOREMESA` ahora se envía desde `remesa.num_remesa`
-  - Visor XML en cola.xml: muestra el XML enviado junto a la respuesta de RNDC en errores
-  - Contadores auto-incrementales en empresa: `consecutivo_remesa`, `consecutivo_manifiesto` (v10) y `radicado_remesa` (v11)
-- [x] **Normalización del XML remesa (v13):**
-  - Variables renombradas a camelCase para coincidir con el RNDC (ej. `CODOPERACIONTRANSPORTE` → `codOperacionTransporte`)
-  - Eliminado `CONSECUTIVOREMESA` duplicado (se envía solo `consecutivoRemesa`)
-  - Agregados `pesoContenedorVacio` (constante `2100`), `duenoPoliza`, `codSedePropietario` al XML
-  - `codSedeRemitente`/`codSedeDestinatario`/`codSedePropietario` se obtienen del campo `sede` del `tercero` maestro
-  - Nuevo campo `dueno_poliza` en solicitud_servicio + remesa (v13)
-- [x] **Ajustes despacho y auto-completado (v14):**
-  - Remesa usa procesoid `3`
-  - `valor_anticipo` movido del formulario inicial al de confirmar despacho
-  - Conductor y propietario de la carga se auto-llenan desde el vehículo al seleccionar placa
-  - Nuevos campos `conductor_tipo_id`, `conductor_num_id` en `vehiculo` (conductor por defecto)
-  - Propietario de la carga = tenedor del vehículo
-  - Conductor muestra nombre completo (nombres + apellidos)
-  - Vista previa XML siempre disponible en cola
-- [x] **Consecutivos como string (v15):**
-  - `consecutivo_remesa`, `consecutivo_manifiesto` cambiados a VARCHAR(20) con formato `REM-00001`/`MAN-00001`
-  - Auto-incremento ocurre al confirmar despacho, no al crear solicitud
-  - `consecutivoRemesa` del XML se toma de `consecutivo_remesa`
-  - Eliminado `radicado_remesa`
-  - Consecutivo de solicitud auto-generado desde el `id` de la BD (empieza en 1)
-- [x] **Catálogo de productos RNDC actualizado:**
-  - Tabla `producto` reestructurada con 16 columnas del CSV oficial (v12)
-  - 3758 productos cargados: CP (carga peligrosa), DP (desecho peligroso), DCRP (desagregación) y 00 (general)
-  - Nuevos campos: `tipo`, `partida`, `clase_division`, `peligro_secundario`, `grupo_embalaje`, etc.
-  - Script `importar_productos_csv.php` para importar desde CSV del RNDC (conversión W1252→UTF-8)
-  - Autocompletado del formulario ahora muestra tipo (con badge de color), clase, peligrosidad y embalaje
-- [x] **Refinamientos de despacho:**
-  - Al confirmar despacho se siembran remesa + manifiesto por cada vehículo y se encolan individualmente
-  - Cada despacho aparece en la lista con botón "Procesar ahora" que envía solo ese despacho
-  - Navegación reorganizada en menús desplegables: **Operación** (Despachos, Cola RNDC, Solicitudes) y **Maestros** (Empresa, Productos, Terceros, Vehículos)
-  - Paginación (10 por página, navegación por bloques) + búsqueda en: terceros, vehículos, solicitudes
-  - Despachos: columna manifiesto, búsqueda por remesa/manifiesto, filtro por fecha (desde/hasta)
-- [x] **Mercancía peligrosa — validación reforzada (v26):**
-  - `codigo_un` y `estado_producto` eliminados del formulario de solicitud — se heredan del producto
-  - Si `naturaleza_carga = 2` (peligrosa), el sistema valida que el producto tenga esos campos y rechaza la solicitud si faltan
-- [x] **Rediseño visual:**
-  - Tema profesional "Freight Terminal" con paleta de colores azul celeste (`--azul-*`)
-  - Encabezado fijo, sombras, tipografía refinada, badges de estado, fichas de detalle
-  - Favicon de camión (SVG)
-- [x] **Diseño responsive:**
-  - Menú hamburguesa en móvil (< 640px)
-  - Tablas con scroll horizontal en pantallas muy angostas
-  - Formularios, fichas, contadores y filtros se apilan verticalmente en móvil
-  - Desplegables navegables por clic en lugar de hover en dispositivos táctiles
-- [x] **QR code local (v27):**
-  - Reemplazada API de Google Charts por `chillerlan/php-qrcode` v6.0.1
-  - QR renderizado como HTML `<table>` con celdas de 0.81 mm (matriz 37×37 = 3 cm)
-  - Texto estructurado RNDC con 12 campos (MEC, Fecha, Placa, etc.) separados por `\r\n`
-  - Margen blanco de 2 mm vía `padding:2mm`
-  - Código `seguridadqr` se consulta al RNDC tras aceptar el manifiesto (tipo=3, procesoid=4)
-- [x] **Multi-remesa por manifiesto (v28):**
-  - Relación 1:N vía tabla `manifiesto_remesa`
-  - `confirmarDespacho()` crea un manifiesto + N remesas desde `$datos['remesas']`
-  - Cada remesa tiene su propio producto, terceros (remitente/destinatario/generador editables), citas de cargue/descargue y valor de mercancía
-  - Formulario de despacho con editor dinámico (JS add/remove remesas)
-  - Cola de envíos: se encolan N remesas + 1 manifiesto por despacho
-  - Payload XML del manifiesto itera `manifiesto_remesa` para construir `<REMESASMAN>` con múltiples `<REMESA>`
-  - PDF de remesas combinado (con page-break entre cada una) o PDF de manifiesto con tabla de todas las remesas
-- [x] **Cola de envíos usa `manifiesto_id`:**
-  - `cola_envios` ahora referencias `manifiesto_id` en lugar de `remesa_id`
-  - `procesarDespacho()` filtra por manifiesto
-  - Listado de despachos consulta vía `manifiesto_remesa`
-- [x] **Cumplido de remesas y manifiesto (procesoid 5 y 6):**
-  - Migración v30 agrega columnas de cumplido a `remesa` y `manifiesto`
-  - Lista de despachos pendientes de cumplido (manifiesto aceptado por RNDC)
-  - Formulario con datos por remesa: tipo cumplido (C/S), cantidad entregada, tiempos de descargue (llegada, entrada, salida) y tiempos de cargue condicionales
-  - Formulario con datos del manifiesto: tipo cumplido, fecha entrega documentos, ajustes financieros, observaciones
-  - Payload XML para procesoid 5 (REMESA) y procesoid 6 (MANIFIESTO) con todas las variables del diccionario RNDC
-  - Encolado automático tras guardar el cumplido
+## Setup & run
 
-> El cliente RNDC (`src/Rndc/RndcClient.php`) está verificado de extremo a extremo
-> contra el servidor real del RNDC con credenciales válidas en `.env`.
+```bash
+# 1. Configure the backend (DB, JWT secret, RNDC credentials)
+cp backend/.env.example backend/.env      # then edit DB_*, JWT_SECRET, RNDC_*
 
-### Fase 4 — Despacho y cola
+# 2. Install both workspaces
+npm install
 
-1. Una solicitud en `borrador` se **confirma** (botón *Confirmar despacho*): se
-   completan vehículo, conductor, responsables de pago y las **remesas** del despacho.
-2. Cada remesa puede tener su propio producto, terceros (remitente/destinatario/generador)
-   y citas de cargue/descargue. Se pueden agregar/eliminar remesas dinámicamente.
-3. Al confirmar se siembran N remesas + 1 manifiesto completos y se **encolan** en
-   orden: tercero (11) → vehículo (12) → remesas (3) → manifiesto (4).
-4. El **worker** (`cron/retry_worker.php`, o el botón *Procesar ahora* en la
-   pantalla **Cola RNDC**) drena la cola con reintentos y backoff. Cuando el
-   manifiesto es aceptado, la solicitud pasa a `despachada`.
-5. **Interruptor de seguridad** `COLA_ENVIO_HABILITADO` (en `.env`):
-   - `false` (por defecto) → *modo seguro*: arma y previsualiza el XML pero **no**
-     lo envía. Útil para revisar el XML antes de escribir en el RNDC.
-   - `true` → envío real al RNDC (según `RNDC_AMBIENTE`).
-6. Cuando un envío falla, la vista `cola.xml` muestra **el XML enviado** junto con
-   la respuesta de error del RNDC, facilitando la depuración.
-7. Tras la aceptación del manifiesto, se consulta automáticamente el `seguridadqr`
-   ante el RNDC y se almacena para incluirlo en el QR del PDF impreso.
+# 3. Create the first admin user (staff_users table is created if missing)
+npm run seed:admin -- --email admin@tms.local --password "CHANGE-ME" --nombre "Admin"
 
-### Fase 5 — Cumplido (procesoid 5 y 6)
+# 4. Start API (:4000) + SPA (:5173, proxies /api)
+npm run dev
+```
 
-Una vez que el manifiesto fue aceptado por el RNDC, se puede registrar el **cumplido**
-(finalización del viaje) desde el menú *Operación → Cumplido*:
+Open http://localhost:5173 and sign in.
 
-1. La lista muestra los manifiestos aceptados cuyo cumplido aún está pendiente.
-2. Al hacer clic en **Cumplir** se abre un formulario con:
-   - **Por remesa**: tipo de cumplido (C=normal / S=suspendido), cantidad entregada,
-     fechas/hora de llegada, entrada y salida de descargue; y condicionalmente
-     fechas/hora de llegada a cargue si no se capturaron al crear la remesa.
-   - **Del manifiesto**: tipo de cumplido, fecha de entrega de documentos, valor
-     adicional y descuento de flete, y observaciones.
-3. Al guardar, los datos se persisten en la BD y se **encolan** para envío al RNDC
-   con procesoid 5 (cumplido remesa) y procesoid 6 (cumplido manifiesto).
-4. El worker de cola los envía en orden: cumplido_remesa (50) → cumplido_manifiesto (60).
+## Scripts
 
-### Consecutivos automáticos
+Run from the repository root:
 
-Cada empresa tiene dos contadores que se auto-incrementan al confirmar un despacho:
+| Command | What it does |
+|---------|--------------|
+| `npm run dev` | Backend + frontend in parallel (`concurrently`) |
+| `npm run build` | Build backend (`tsc`) and frontend (`vite build`) |
+| `npm run typecheck` | Typecheck both workspaces |
+| `npm test` | Backend tests — RNDC byte‑parity + QR format |
+| `npm run worker` | Drain the RNDC queue once (schedule via cron / Task Scheduler) |
+| `npm run seed:admin` | Create / refresh the admin user |
 
-| Contador | Columna en `maestro_empresa` | Formato | Uso |
-|----------|------------------------------|---------|-----|
-| Remesa | `consecutivo_remesa` | `REM-00001` | `num_remesa` en la remesa |
-| Manifiesto | `consecutivo_manifiesto` | `MAN-00001` | `num_manifiesto` en el manifiesto |
+## Configuration (`.env`)
 
-Estos contadores se reservan en el momento de `confirmarDespacho()`, no al crear
-la solicitud. El XML envía `consecutivoRemesa` extraído del `num_remesa` almacenado.
+`backend/.env` (see `backend/.env.example`). The backend also reads a repo‑root
+`.env` as a fallback for shared values.
 
-### Paginación y búsqueda
+| Group | Keys |
+|-------|------|
+| App | `APP_ENV`, `APP_DEBUG`, `PORT` (4000), `CORS_ORIGINS` |
+| Auth | `JWT_SECRET`, `JWT_EXPIRES` |
+| Database | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`, `DB_CHARSET` |
+| RNDC | `RNDC_AMBIENTE` (`pruebas`/`produccion`), `RNDC_USERNAME`, `RNDC_PASSWORD`, `RNDC_EMPRESA`, `RNDC_HOST_OVERRIDE`, `RNDC_TIMEOUT` |
+| Queue | `COLA_MAX_INTENTOS`, `COLA_MINUTOS_REINTENTO`, `COLA_ENVIO_HABILITADO` |
 
-Las listas de Terceros, Vehículos, Solicitudes y Despachos incluyen:
+## API overview
 
-- **Paginación de 10 registros por página** con navegación por bloques (1-10, 11-20…)
-- **Búsqueda por texto**: terceros (nombre/num_id), vehículos (placa), solicitudes (consecutivo), despachos (num_remesa/num_manifiesto)
-- **Filtro por fecha** en despachos (desde / hasta sobre `created_at`)
+All routes are under `/api` and require a Bearer JWT (except `/api/health` and
+`/api/auth/login`). Representative endpoints:
 
-### Navegación
+| Area | Endpoints |
+|------|-----------|
+| Auth | `POST /auth/login`, `GET /auth/me` |
+| Maestros | `GET/POST/PUT /terceros`, `/vehiculos`, `/productos`; `GET /municipios/buscar`, `/catalogos/*`; `GET/PUT /empresa` |
+| RNDC register | `POST /terceros/:id/registrar-rndc`, `POST /vehiculos/:id/registrar-rndc` *(admin)* |
+| Operación | `GET/POST/PUT /solicitudes`, `POST /solicitudes/:id/despachar`, `GET /despachos` |
+| Cola | `GET /cola`, `POST /cola/procesar` *(admin)*, `POST /cola/:id/procesar` *(admin)*, `GET /cola/:id/xml` |
+| Cumplido | `GET /cumplido`, `GET/POST /cumplido/:manifiestoId` |
+| Docs | `GET /manifiesto/:id/pdf`, `GET /remesa/:manifiestoId/pdf` |
+| Insights | `GET /stats`, `GET /informe`, `GET /informe/csv` |
 
-El menú superior se organiza en dos grupos con desplegables:
+## Authentication & roles
 
-- **Operación**: Inicio, Despachos, Cola RNDC, Solicitudes
-- **Maestros**: Empresa, Productos, Terceros, Vehículos
+Staff accounts live in `staff_users` (bcrypt). Login returns a JWT (persisted
+client‑side by Zustand). Two roles:
 
-En móvil (< 640px) la navegación colapsa en un menú hamburguesa y los
-desplegables se abren con clic en lugar de hover.
+- **`operador`** — day‑to‑day: maestros, solicitudes, confirm dispatch (enqueues),
+  cumplido, reports, PDFs.
+- **`admin`** — everything above **plus** real RNDC sends (draining the queue,
+  registering maestros) and editing company data.
 
-### Diseño responsive
+## Safety switch (RNDC sending)
 
-El sistema se adapta a tres puntos de quiebre:
+`COLA_ENVIO_HABILITADO=false` (default) makes the worker **build and preview** the
+RNDC XML but **never send** it — safe for development and testing. Set it to `true`
+only when you intend to write to the Ministry's RNDC, and note that sending is
+additionally restricted to the `admin` role.
 
-- **≤ 768px**: contadores 2 columnas, formularios apilados, tablas más compactas
-- **≤ 640px**: menú hamburguesa, navegación vertical, botones a ancho completo
-- **≤ 400px**: contadores 1 columna, tablas con scroll horizontal
+## Testing & parity
 
-### Catálogo de productos
+- `npm test` runs **characterization tests**: the TypeScript RNDC client produces
+  **byte‑for‑byte identical** XML/SOAP to the original PHP (including the
+  **ISO‑8859‑1** wire encoding), and the manifiesto **QR** text keeps its exact
+  field order/format.
+- **Real‑data parity:** the `payload_xml` rows generated by the legacy PHP app were
+  regenerated by the Node `ColaRepo` and matched byte‑for‑byte.
+- Regenerate RNDC fixtures with `php backend/test/gen_rndc_fixtures.php` (source of
+  truth: `legacy/src/Rndc/RndcClient.php`).
 
-La tabla `producto` se alimenta del archivo CSV oficial del RNDC
-(`Maestro_Codificación de Productos_RNDC.csv`). Contiene 3758 productos clasificados por tipo:
+## Migration notes (PHP → Node.js)
 
-| Tipo | Significado | Cantidad |
-|------|-------------|----------|
-| `00` | Mercancía general (subpartidas arancelarias) | 1264 |
-| `CP` | Carga peligrosa (clase ONU) | 2347 |
-| `DP` | Desechos peligrosos | 107 |
-| `DCRP` | Desagregación de corrientes de residuo peligroso | 40 |
+The rewrite ports the PHP repositories 1:1 to typed `mysql2` modules — the SQL and
+business rules are preserved, not reinterpreted. Highlights:
 
-Al seleccionar un producto en el formulario de solicitud, se muestra su tipo (con badge
-de color), clase/división, peligro secundario y grupo de embalaje/envase.
+- `RndcClient.php` → `backend/src/rndc/RndcClient.ts` (SOAP, ISO‑8859‑1, host
+  load‑balancing, XML build/parse) — verified byte‑identical.
+- `ColaRepo.php` → `backend/src/modules/cola/` (queue order, dependency gate,
+  retry/backoff, safe‑mode, origin propagation, QR lookup, payload builders).
+- `SolicitudRepo.php` → `backend/src/modules/solicitudes/` (seeding, retentions,
+  multi‑remesa).
+- New in the modern stack: JWT auth + roles, the Recharts dashboard, and the
+  CSV **Informe**.
+
+See [docs/MODERNIZACION.md](docs/MODERNIZACION.md) for the full migration guide.

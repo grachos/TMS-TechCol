@@ -2,20 +2,20 @@
   "name": "tms-light-new",
   "version": "1.0.0",
   "private": true,
-  "description": "Light TMS - Colombian freight TMS (RNDC). Modern stack: React + Node/Express + TypeScript + mysql2. The /public + /src PHP app is kept as reference until parity.",
+  "description": "Light TMS - Colombian freight TMS (RNDC). Modern stack: React + Node/Express + TypeScript + mysql2. The original PHP app is kept under /legacy for reference.",
   "workspaces": [
-    "server",
-    "client"
+    "backend",
+    "frontend"
   ],
   "scripts": {
     "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "npm --prefix server run dev",
-    "dev:client": "npm --prefix client run dev",
-    "build": "npm --prefix server run build && npm --prefix client run build",
-    "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
-    "seed:admin": "npm --prefix server run seed:admin",
-    "worker": "npm --prefix server run worker",
-    "test": "npm --prefix server test"
+    "dev:server": "npm --prefix backend run dev",
+    "dev:client": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck",
+    "seed:admin": "npm --prefix backend run seed:admin",
+    "worker": "npm --prefix backend run worker",
+    "test": "npm --prefix backend test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
