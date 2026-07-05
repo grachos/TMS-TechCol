@@ -1,18 +1,27 @@
-# Credenciales y configuración local
+# Dependencies
+node_modules/
+legacy/vendor/
+
+# Build output
+dist/
+frontend/dist/
+backend/dist/
+
+# Env / local config
 .env
 .env.local
+backend/.env
+frontend/.env
 
 # Logs
 logs/*.log
 *.log
 
-# Dependencias (si más adelante se usa Composer)
-/vendor/
+# Vite cache
+**/.vite/
 
-# Archivos del sistema
+# System / editor
 .DS_Store
 Thumbs.db
-
-# Editor
 .vscode/
 .idea/
