@@ -1156,3 +1156,10 @@ INSERT INTO municipio (codigo_rndc, codigo_dane, departamento, nombre, nombre_co
 ('47001999', '47001', 'MAGDALENA', 'BONDA', 'BONDA, MAGDALENA');
 
 -- fin migracion_v19
+
+-- Este dataset solo tiene municipios (no corregimientos/localidades), así que
+-- nombre_mpio (municipio al que pertenece) es siempre igual a nombre. Sin esto,
+-- MunicipioRepo.buscar() arma la etiqueta como "{nombre} – {nombre_mpio}, {depto}"
+-- cada vez que nombre !== nombre_mpio, y con nombre_mpio vacío eso se ve
+-- "GUACA – , SANTANDER" en vez de caer al nombre_completo correcto.
+UPDATE municipio SET nombre_mpio = nombre WHERE nombre_mpio = '' OR nombre_mpio IS NULL;
