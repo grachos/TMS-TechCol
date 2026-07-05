@@ -8,9 +8,11 @@
  *   GET  /api/cola/:id/xml           XML preview + RNDC response (text/plain)
  *
  *   GET  /api/despachos              dispatches list (q, p, desde, hasta)
+ *   GET  /api/despachos/resumen      count not yet accepted by RNDC (nav badge polling)
  *   POST /api/despachos/:manifiestoId/procesar   send one dispatch (admin)
  *
  *   GET  /api/cumplido               dispatches pending cumplido
+ *   GET  /api/cumplido/resumen       count pending cumplido (nav badge polling)
  *   GET  /api/cumplido/:manifiestoId manifiesto + solicitud + remesas
  *   POST /api/cumplido/:manifiestoId save cumplido + enqueue (operador OK)
  */
@@ -95,6 +97,17 @@ despachoRouter.get(
   }),
 );
 
+/**
+ * GET /api/despachos/resumen — count of remesas not yet accepted by the RNDC.
+ * Cheap enough to poll from the nav badge on every authenticated page.
+ */
+despachoRouter.get(
+  '/resumen',
+  asyncHandler(async (_req, res) => {
+    res.json({ pendientes: await cola.contarDespachosPendientes() });
+  }),
+);
+
 despachoRouter.post(
   '/:manifiestoId/procesar',
   requireRole('admin'),
@@ -111,6 +124,17 @@ cumplidoRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
     res.json(await cola.listarPendientesCumplido());
+  }),
+);
+
+/**
+ * GET /api/cumplido/resumen — count of manifiestos pending cumplido.
+ * Cheap enough to poll from the nav badge on every authenticated page.
+ */
+cumplidoRouter.get(
+  '/resumen',
+  asyncHandler(async (_req, res) => {
+    res.json({ pendientes: await cola.contarPendientesCumplido() });
   }),
 );
 

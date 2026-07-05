@@ -3,6 +3,7 @@
  *
  *   GET    /api/terceros            list (q, p)
  *   GET    /api/terceros/buscar     autocomplete (q, solo_conductor)
+ *   GET    /api/terceros/resumen    count not yet registered in RNDC (nav badge polling)
  *   GET    /api/terceros/:id        single
  *   POST   /api/terceros            create
  *   PUT    /api/terceros/:id        update
@@ -36,6 +37,17 @@ terceroRouter.get(
     const q = String(req.query.q ?? '');
     const solo = Boolean(req.query.solo_conductor);
     res.json(await repo.buscar(q, solo));
+  }),
+);
+
+/**
+ * GET /api/terceros/resumen — count of terceros not yet registered in the RNDC.
+ * Cheap enough to poll from the nav badge on every authenticated page.
+ */
+terceroRouter.get(
+  '/resumen',
+  asyncHandler(async (_req, res) => {
+    res.json({ pendientes: await repo.contarPendientes() });
   }),
 );
 
@@ -81,7 +93,12 @@ terceroRouter.post(
   asyncHandler(async (req, res) => {
     const resp = await repo.registrarEnRndc(Number(req.params.id));
     if (resp.ok) {
-      res.json({ ok: true, ingresoId: resp.ingresoId });
+      res.json({
+        ok: true,
+        ingresoId: resp.ingresoId,
+        duplicado: resp.duplicado,
+        mensaje: resp.duplicado ? 'El tercero ya estaba registrado en el RNDC con los mismos datos.' : undefined,
+      });
     } else {
       res.status(422).json({ ok: false, error: `RNDC: ${resp.error}` });
     }

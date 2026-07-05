@@ -3,6 +3,7 @@
  *   GET    /api/vehiculos            list (q, p)
  *   GET    /api/vehiculos/buscar     plate autocomplete
  *   GET    /api/vehiculos/detalle    ?placa= -> conductor + tenedor (despacho autofill)
+ *   GET    /api/vehiculos/resumen    count not yet registered in RNDC (nav badge polling)
  *   GET    /api/vehiculos/:id        single
  *   POST   /api/vehiculos            create
  *   PUT    /api/vehiculos/:id        update
@@ -44,6 +45,17 @@ vehiculoRouter.get(
   }),
 );
 
+/**
+ * GET /api/vehiculos/resumen — count of vehículos not yet registered in the RNDC.
+ * Cheap enough to poll from the nav badge on every authenticated page.
+ */
+vehiculoRouter.get(
+  '/resumen',
+  asyncHandler(async (_req, res) => {
+    res.json({ pendientes: await repo.contarPendientes() });
+  }),
+);
+
 vehiculoRouter.get(
   '/:id',
   asyncHandler(async (req, res) => {
@@ -81,7 +93,15 @@ vehiculoRouter.post(
   requireRole('admin'),
   asyncHandler(async (req, res) => {
     const resp = await repo.registrarEnRndc(Number(req.params.id));
-    if (resp.ok) res.json({ ok: true, ingresoId: resp.ingresoId });
-    else res.status(422).json({ ok: false, error: `RNDC: ${resp.error}` });
+    if (resp.ok) {
+      res.json({
+        ok: true,
+        ingresoId: resp.ingresoId,
+        duplicado: resp.duplicado,
+        mensaje: resp.duplicado ? 'El vehículo ya estaba registrado en el RNDC con los mismos datos.' : undefined,
+      });
+    } else {
+      res.status(422).json({ ok: false, error: `RNDC: ${resp.error}` });
+    }
   }),
 );

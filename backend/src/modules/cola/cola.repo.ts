@@ -631,6 +631,22 @@ export async function listarDespachosConPaginacion(
   return { items: rows as Row[], total };
 }
 
+/** Count of remesas not yet accepted by the RNDC. Backs the "Despachos" nav badge. */
+export async function contarDespachosPendientes(): Promise<number> {
+  const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
+    "SELECT COUNT(*) AS n FROM remesa WHERE estado_rndc <> 'aceptado'",
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** Count of manifiestos pending cumplido. Backs the "Cumplido" nav badge. */
+export async function contarPendientesCumplido(): Promise<number> {
+  const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
+    "SELECT COUNT(*) AS n FROM manifiesto WHERE cumplido_estado_rndc = 'pendiente'",
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 /** Dispatches whose manifiesto was accepted but cumplido is pending. Port of listarPendientesCumplido(). */
 export async function listarPendientesCumplido(): Promise<Row[]> {
   const [rows] = await db().query<RowDataPacket[]>(

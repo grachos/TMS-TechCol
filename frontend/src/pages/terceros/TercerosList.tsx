@@ -70,8 +70,11 @@ export default function TercerosList() {
     setSending(id);
     setFlash(null);
     try {
-      const r = await api<{ ok: boolean; ingresoId?: string }>(`/terceros/${id}/registrar-rndc`, { method: 'POST' });
-      setFlash({ kind: 'ok', message: `Tercero registrado en RNDC (id ${r.ingresoId}).` });
+      const r = await api<{ ok: boolean; ingresoId?: string; duplicado?: boolean; mensaje?: string }>(
+        `/terceros/${id}/registrar-rndc`,
+        { method: 'POST' },
+      );
+      setFlash({ kind: 'ok', message: r.mensaje ?? `Tercero registrado en RNDC (id ${r.ingresoId}).` });
       await load();
     } catch (e) {
       setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo registrar.' });

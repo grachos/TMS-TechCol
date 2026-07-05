@@ -116,6 +116,14 @@ export async function listarConPaginacion(q = '', pagina = 1, porPagina = 10): P
   return { items: rows, total };
 }
 
+/** Count of terceros not yet registered in the RNDC. Backs the "Terceros" nav badge. */
+export async function contarPendientes(): Promise<number> {
+  const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
+    "SELECT COUNT(*) AS n FROM tercero WHERE estado_rndc <> 'registrado'",
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 /** Fetches a full tercero by id. Port of obtener(). */
 export async function obtener(id: number): Promise<Tercero | null> {
   const [rows] = await db().query<(Tercero & RowDataPacket)[]>('SELECT * FROM tercero WHERE id = :id', { id });

@@ -370,6 +370,12 @@ export class RndcClient {
 
     const errorMsg = this.extraerNodo(ret, 'ErrorMSG') ?? this.extraerNodo(ret, 'error');
     if (errorMsg !== null) {
+      // "DUPLICADO:<ingresoid> ..." — an identical record was already registered
+      // in a prior attempt; not a real failure, so it's treated as a success.
+      const dup = /^DUPLICADO:\s*(\d+)/i.exec(errorMsg);
+      if (dup?.[1]) {
+        return RndcRespuesta.duplicado(dup[1], errorMsg, httpCode, ret, xmlEnviado);
+      }
       return RndcRespuesta.fallo(errorMsg, httpCode, ret, xmlEnviado);
     }
 

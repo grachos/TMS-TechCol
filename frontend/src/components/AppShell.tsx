@@ -26,13 +26,36 @@ import {
 import { useAuthStore } from '../store/auth';
 import { api } from '../lib/api';
 
-/** How often to re-poll the queue badge count (ms). */
-const COLA_POLL_MS = 20_000;
+/** How often to re-poll the nav badge counts (ms). */
+const BADGE_POLL_MS = 20_000;
 
 interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+}
+
+/** Polls a `{ pendientes }` count endpoint every BADGE_POLL_MS. */
+function usePendientes(endpoint: string): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const r = await api<{ pendientes?: number }>(endpoint);
+        if (!cancelled) setCount(r.pendientes ?? 0);
+      } catch {
+        // Ignore transient failures (e.g. session expiring) — the next poll retries.
+      }
+    }
+    void poll();
+    const timer = setInterval(poll, BADGE_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [endpoint]);
+  return count;
 }
 
 const NAV: { section?: string; items: NavItem[] }[] = [
@@ -77,12 +100,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     }
     void poll();
-    const timer = setInterval(poll, COLA_POLL_MS);
+    const timer = setInterval(poll, BADGE_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
   }, []);
+
+  // Poll pending/not-yet-migrated counts for the other nav badges.
+  const despachosPendientes = usePendientes('/despachos/resumen');
+  const cumplidoPendientes = usePendientes('/cumplido/resumen');
+  const tercerosPendientes = usePendientes('/terceros/resumen');
+  const vehiculosPendientes = usePendientes('/vehiculos/resumen');
+  const pendientesPorRuta: Record<string, number> = {
+    '/despachos': despachosPendientes,
+    '/cumplido': cumplidoPendientes,
+    '/terceros': tercerosPendientes,
+    '/vehiculos': vehiculosPendientes,
+  };
 
   const doLogout = () => {
     logout();
@@ -131,6 +166,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       {item.to === '/cola' && colaPendientes > 0 && (
                         <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
                           {colaPendientes > 99 ? '99+' : colaPendientes}
+                        </span>
+                      )}
+                      {(pendientesPorRuta[item.to] ?? 0) > 0 && (
+                        <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                          {(pendientesPorRuta[item.to] ?? 0) > 99 ? '99+' : pendientesPorRuta[item.to]}
                         </span>
                       )}
                     </NavLink>

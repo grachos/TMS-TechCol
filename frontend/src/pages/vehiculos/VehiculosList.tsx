@@ -57,8 +57,11 @@ export default function VehiculosList() {
     setSending(id);
     setFlash(null);
     try {
-      const r = await api<{ ok: boolean; ingresoId?: string }>(`/vehiculos/${id}/registrar-rndc`, { method: 'POST' });
-      setFlash({ kind: 'ok', message: `Vehículo registrado en RNDC (id ${r.ingresoId}).` });
+      const r = await api<{ ok: boolean; ingresoId?: string; duplicado?: boolean; mensaje?: string }>(
+        `/vehiculos/${id}/registrar-rndc`,
+        { method: 'POST' },
+      );
+      setFlash({ kind: 'ok', message: r.mensaje ?? `Vehículo registrado en RNDC (id ${r.ingresoId}).` });
       await load();
     } catch (e) {
       setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo registrar.' });
