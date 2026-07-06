@@ -257,8 +257,18 @@ export class RndcClient {
 
       return { httpCode, respuestaUtf8, errConn: null };
     } catch (e) {
+      // Node's fetch (undici) wraps the real reason (DNS failure, connection
+      // refused, timeout, TLS error…) in `cause` — e.message alone is just the
+      // generic "fetch failed". Surface both so this is diagnosable in
+      // production without needing to reproduce it locally.
       const msg = e instanceof Error ? e.message : String(e);
-      return { httpCode: 0, respuestaUtf8: '', errConn: `Error de conexión: ${msg}` };
+      const cause = e instanceof Error && e.cause ? (e.cause instanceof Error ? e.cause.message : String(e.cause)) : null;
+      console.error('RNDC postSoap error:', e);
+      return {
+        httpCode: 0,
+        respuestaUtf8: '',
+        errConn: `Error de conexión: ${msg}${cause ? ` (${cause})` : ''}`,
+      };
     } finally {
       clearTimeout(timer);
     }
