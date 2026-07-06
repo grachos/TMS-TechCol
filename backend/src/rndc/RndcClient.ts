@@ -42,7 +42,9 @@ const PROCESOS_EXPEDIR = [3, 4]; // Remesa, Manifiesto
 const PROCESOS_CONSULTAS = [26, 27, 48, 55]; // Consultas
 
 const HOSTS = {
-  pruebas: 'http://rndcpruebas.mintransporte.gov.co:8080',
+  // "Ambiente pruebas" per the Ministry's official load-balancing table — NOT
+  // rndcpruebas.mintransporte.gov.co (a stale host with different routing).
+  pruebas: 'http://rndc.mintransporte.gov.co:8080',
   expedir: 'http://rndcws2.mintransporte.gov.co:8080',
   consultas: 'http://plc.mintransporte.gov.co:8080',
   otros: 'http://rndcws.mintransporte.gov.co:8080',

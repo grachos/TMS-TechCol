@@ -44,20 +44,33 @@ Ruta del servicio: `/soap/IBPMServices`.
 
 ## Servidores (balanceo de carga oficial)
 
-| Servidor | Host:puerto | Procesos | Estado verificado (2026-06-18) |
-|---|---|---|---|
-| Pruebas | `rndcpruebas.mintransporte.gov.co:8080` | todos (ambiente prueba) | (no probado) |
-| Expedir | `rndcws2.mintransporte.gov.co:8080` | **3 (Remesa), 4 (Manifiesto)** | ✅ responde |
-| Consultas | `plc.mintransporte.gov.co:8080` | consultas | ✅ verificado (consulta real OK) |
-| Otros | `rndcws.mintransporte.gov.co:8080` | el resto | ✅ responde |
+Tabla oficial del Ministerio ("Balanceo de Carga a los Servidores del RNDC"),
+2026-07-05:
 
+| Servidor | Host:puerto (SOAP) | Procesos | Estado verificado |
+|---|---|---|---|
+| Pruebas | `rndc.mintransporte.gov.co:8080` | todos (ambiente prueba) | timeout (ver nota IP abajo) |
+| Mantenimiento | `rndc2.mintransporte.gov.co:8080` | (fallback si A está en mantenimiento) | no probado |
+| Otros | `rndcws.mintransporte.gov.co:8080` | 1,2,5,6,7,8,9,11,12,17,28,29,32,33,34,38,41,44,45,46,54,60,67,68,73,75,79,81,82,83,86,90,91,92,93,96,103,106,… | ✅ responde |
+| Expedir | `rndcws2.mintransporte.gov.co:8080` | **3 (Remesa), 4 (Manifiesto)** | ✅ responde |
+| Consultas | `plc.mintransporte.gov.co:8080` | 26, 27, 48, 55 | ✅ verificado (consulta real OK) |
+
+> ⚠️ **`rndc.mintransporte.gov.co` (el host oficial de "Ambiente pruebas") no
+> respondió (timeout) ni siquiera desde una IP que sí alcanza `rndcws`/`rndcws2`/
+> `plc` sin problema** — a diferencia de esos tres, parece requerir autorización
+> previa independientemente de la geografía. El viejo alias
+> `rndcpruebas.mintransporte.gov.co:8080` sigue respondiendo (WSDL genérico) pero
+> puede no ser el endpoint real de pruebas vigente.
+>
 > Las IP extranjeras están **bloqueadas** (salvo EE. UU.). Para acceder desde una IP
 > extranjera hay que solicitarlo al Grupo de Logística del Ministerio. La IP del
-> servidor Hostinger debe poder llegar a estos hosts.
+> servidor Hostinger debe poder llegar a estos hosts — confirmarla con
+> `GET /api/diagnostico/ip-saliente` (temporal, ver `backend/src/app.ts`).
 >
 > Además del ambiente programático hay **wstest** (sin programar):
 > `https://rndc.mintransporte.gov.co/wstest/default.aspx` (y default2/default3 para
-> apuntar a rndcws2 / plc).
+> apuntar a rndcws2 / plc). También existen endpoints REST (`:8081` HTTP,
+> `inside.mintransporte.gov.co:443` HTTPS) que este cliente no usa (solo SOAP).
 
 El cliente resuelve el endpoint automáticamente con `RNDC_AMBIENTE`
 (`pruebas` | `produccion`) y enruta por `procesoid`. Se puede forzar con
