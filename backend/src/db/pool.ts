@@ -10,6 +10,7 @@ import mysql, { type Pool, type PoolConnection } from 'mysql2/promise';
 import { config } from '../config/env.js';
 
 let poolInstance: Pool | null = null;
+let readonlyPoolInstance: Pool | null = null;
 
 /** Returns the shared connection pool (created lazily). */
 export function db(): Pool {
@@ -31,6 +32,33 @@ export function db(): Pool {
     namedPlaceholders: true,
   });
   return poolInstance;
+}
+
+/**
+ * Separate pool for the chatbot's LLM-generated queries. Uses the read-only DB
+ * user (config().dbReadonly) and hard-disables multi-statement execution, so a
+ * malicious or malformed generated query can't stack `;`-separated statements.
+ * This is defence-in-depth on top of the SELECT-only guard in chat.repo.ts —
+ * the real security boundary is granting this user SELECT only.
+ */
+export function dbReadonly(): Pool {
+  if (readonlyPoolInstance) return readonlyPoolInstance;
+  const cfg = config().db;
+  const ro = config().dbReadonly;
+  readonlyPoolInstance = mysql.createPool({
+    host: cfg.host,
+    port: cfg.port,
+    database: cfg.name,
+    user: ro.user,
+    password: ro.pass,
+    charset: cfg.charset === 'utf8mb4' ? 'utf8mb4' : cfg.charset,
+    waitForConnections: true,
+    connectionLimit: 5,
+    multipleStatements: false,
+    decimalNumbers: false,
+    dateStrings: true,
+  });
+  return readonlyPoolInstance;
 }
 
 /**

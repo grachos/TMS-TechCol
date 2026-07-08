@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { api } from '../lib/api';
+import { ChatWidget } from './ChatWidget';
 
 /** How often to re-poll the nav badge counts (ms). */
 const BADGE_POLL_MS = 20_000;
@@ -203,6 +204,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>
+
+      <ChatWidget />
     </div>
   );
 }

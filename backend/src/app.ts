@@ -26,6 +26,7 @@ import { colaRouter, despachoRouter, cumplidoRouter } from './modules/cola/cola.
 import { pdfManifiestoRouter, pdfRemesaRouter } from './modules/pdf/pdf.routes.js';
 import { statsRouter } from './modules/stats/stats.routes.js';
 import { informeRouter } from './modules/informe/informe.routes.js';
+import { chatRouter } from './modules/chat/chat.routes.js';
 
 export function createApp() {
   const app = express();
@@ -65,6 +66,7 @@ export function createApp() {
   api.use('/remesa', pdfRemesaRouter);
   api.use('/stats', statsRouter);
   api.use('/informe', informeRouter);
+  api.use('/chat', chatRouter);
   //   api.use('/vehiculos', vehiculoRouter) ... etc.
 
   // TEMPORARY — remove once confirmed. Reports this server's actual outbound

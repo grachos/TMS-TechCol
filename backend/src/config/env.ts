@@ -48,12 +48,22 @@ export interface AppConfig {
   app: { name: string; env: string; debug: boolean; port: number; corsOrigins: string[] };
   auth: { jwtSecret: string; jwtExpires: string };
   db: { host: string; port: number; name: string; user: string; pass: string; charset: string };
+  /** Read-only DB user for the chatbot (least privilege). Falls back to the main user. */
+  dbReadonly: { user: string; pass: string };
   rndc: {
     ambiente: string;
     hostOverride: string;
     timeout: number;
   };
   cola: { maxIntentos: number; minutosReintento: number; envioHabilitado: boolean };
+  /** Data chatbot via OpenRouter (OpenAI-compatible API). */
+  chat: {
+    habilitado: boolean;
+    apiKey: string;
+    modelo: string;
+    baseUrl: string;
+    maxFilas: number;
+  };
 }
 
 let cached: AppConfig | null = null;
@@ -84,6 +94,12 @@ export function config(): AppConfig {
       pass: str('DB_PASS', ''),
       charset: str('DB_CHARSET', 'utf8mb4'),
     },
+    dbReadonly: {
+      // If DB_READONLY_* are unset, the chatbot uses the main DB user. Strongly
+      // recommended: create a MySQL user with SELECT-only grants (see chat.repo.ts).
+      user: str('DB_READONLY_USER', str('DB_USER', 'root')),
+      pass: str('DB_READONLY_PASS', str('DB_PASS', '')),
+    },
     rndc: {
       // 'pruebas' (servidor rndc) o 'produccion' (rndcws/rndcws2/plc).
       ambiente: str('RNDC_AMBIENTE', 'pruebas'),
@@ -95,6 +111,15 @@ export function config(): AppConfig {
       minutosReintento: int('COLA_MINUTOS_REINTENTO', 15),
       // Safety switch: false builds/previews XML but does NOT send to the RNDC.
       envioHabilitado: bool('COLA_ENVIO_HABILITADO', false),
+    },
+    chat: {
+      // Opt-in: the chatbot only works once an OpenRouter key is set and enabled.
+      habilitado: bool('CHAT_HABILITADO', false),
+      apiKey: str('OPENROUTER_API_KEY', ''),
+      // Free/cheap model with tool-calling support. Override via OPENROUTER_MODEL.
+      modelo: str('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3-0324:free'),
+      baseUrl: str('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+      maxFilas: int('CHAT_MAX_FILAS', 200),
     },
   };
   return cached;

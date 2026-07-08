@@ -191,7 +191,53 @@ pantalla de la app (o en `Avanzado → SSH Access`, corriendo `which node`).
 
 ---
 
-## 6. Checklist post-despliegue
+## 6. (Opcional) Chatbot de datos con OpenRouter
+
+El asistente de datos (widget flotante) responde preguntas en lenguaje
+natural sobre la BD ("¿cuántos manifiestos he creado?", "¿qué falta por
+cumplir?"). Usa **OpenRouter** (API compatible con OpenAI, con modelos
+gratuitos) — no requiere instalar ningún SDK. Está **deshabilitado por
+defecto**; para activarlo:
+
+1. Crea una cuenta en <https://openrouter.ai> y genera una API key.
+2. En las **Variables de entorno** de la app Node agrega:
+   ```env
+   CHAT_HABILITADO=true
+   OPENROUTER_API_KEY=sk-or-...
+   OPENROUTER_MODEL=deepseek/deepseek-chat-v3-0324:free   # gratis, con tool-calling
+   ```
+3. **Muy recomendado — usuario de BD de solo lectura** (mínimo privilegio).
+   El chatbot ejecuta SELECTs que genera el modelo; con un usuario SELECT-only
+   un error del modelo no puede escribir ni leer tablas sensibles. En
+   phpMyAdmin → SQL (ajusta el nombre de la BD y la clave):
+   ```sql
+   CREATE USER 'uXXXX_tms_ro'@'localhost' IDENTIFIED BY 'CLAVE_FUERTE';
+   GRANT SELECT ON uXXXX_light_tms.solicitud_servicio TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.manifiesto          TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.remesa              TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.manifiesto_remesa   TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.tercero             TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.vehiculo            TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.cola_envios         TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.producto            TO 'uXXXX_tms_ro'@'localhost';
+   GRANT SELECT ON uXXXX_light_tms.municipio           TO 'uXXXX_tms_ro'@'localhost';
+   -- NO concedas staff_users ni maestro_empresa (credenciales).
+   ```
+   Luego, en variables de entorno:
+   ```env
+   DB_READONLY_USER=uXXXX_tms_ro
+   DB_READONLY_PASS=CLAVE_FUERTE
+   ```
+   Si omites `DB_READONLY_*`, el chatbot usa el usuario principal (funciona,
+   pero pierdes la barrera de mínimo privilegio). El código igualmente bloquea
+   `SELECT`-only, una sola sentencia, y tablas/columnas sensibles.
+
+Verificación: al entrar a la app aparece un botón de chat abajo a la derecha;
+`GET /api/chat/estado` responde `{"habilitado":true}`.
+
+---
+
+## 7. Checklist post-despliegue
 
 - [ ] `GET /api/health` responde `{"ok":true,"database":{"ok":true}}`.
 - [ ] `/` sirve la pantalla de login de React (no "Cannot GET /").
