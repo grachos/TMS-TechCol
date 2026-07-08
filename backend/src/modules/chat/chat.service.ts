@@ -65,37 +65,72 @@ function systemPrompt(): string {
   ].join('\n');
 }
 
+/**
+ * Modelos gratuitos con soporte de tool-calling usados como respaldo cuando el
+ * modelo configurado es `:free` (los proveedores gratis se saturan a menudo;
+ * OpenRouter enruta al siguiente disponible de la lista `models`).
+ */
+const FALLBACKS_GRATIS = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-coder:free',
+  'openai/gpt-oss-120b:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+];
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function llamarOpenRouter(mensajes: ChatMessage[]): Promise<ChatMessage> {
   const cfg = config().chat;
-  const resp = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${cfg.apiKey}`,
-      'Content-Type': 'application/json',
-      // Opcionales de OpenRouter (identifican la app en su ranking).
-      'HTTP-Referer': 'https://tmslight.techcol-service.cc',
-      'X-Title': 'Light TMS',
-    },
-    body: JSON.stringify({
-      model: cfg.modelo,
-      messages: mensajes,
-      tools: HERRAMIENTAS,
-      tool_choice: 'auto',
-      temperature: 0.1,
-      max_tokens: 1024,
-    }),
-    signal: AbortSignal.timeout(45_000),
+  const esGratis = cfg.modelo.endsWith(':free');
+  // Con modelos gratis mandamos la lista `models` (fallback automático de
+  // OpenRouter). Con uno de pago mandamos solo ese, para no enrutar a otro
+  // proveedor con costo inesperado.
+  // OpenRouter limita `models` a 3 elementos.
+  const modelos = esGratis
+    ? Array.from(new Set([cfg.modelo, ...FALLBACKS_GRATIS])).slice(0, 3)
+    : [cfg.modelo];
+
+  const body = JSON.stringify({
+    model: modelos[0],
+    ...(modelos.length > 1 ? { models: modelos } : {}),
+    messages: mensajes,
+    tools: HERRAMIENTAS,
+    tool_choice: 'auto',
+    temperature: 0.1,
+    max_tokens: 1024,
   });
 
-  if (!resp.ok) {
-    const cuerpo = await resp.text().catch(() => '');
-    throw new Error(`OpenRouter HTTP ${resp.status}: ${cuerpo.slice(0, 300)}`);
+  let ultimoError = '';
+  for (let intento = 0; intento < 3; intento++) {
+    const resp = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.apiKey}`,
+        'Content-Type': 'application/json',
+        // Opcionales de OpenRouter (identifican la app en su ranking).
+        'HTTP-Referer': 'https://tmslight.techcol-service.cc',
+        'X-Title': 'Light TMS',
+      },
+      body,
+      signal: AbortSignal.timeout(45_000),
+    });
+
+    if (resp.status === 429 || resp.status >= 500) {
+      ultimoError = `HTTP ${resp.status}`;
+      await delay(1200 * (intento + 1)); // backoff antes de reintentar
+      continue;
+    }
+    if (!resp.ok) {
+      const cuerpo = await resp.text().catch(() => '');
+      throw new Error(`OpenRouter HTTP ${resp.status}: ${cuerpo.slice(0, 300)}`);
+    }
+    const data = (await resp.json()) as { choices?: { message?: ChatMessage }[]; error?: { message?: string } };
+    if (data.error) throw new Error(`OpenRouter: ${data.error.message ?? 'error desconocido'}`);
+    const msg = data.choices?.[0]?.message;
+    if (!msg) throw new Error('OpenRouter devolvió una respuesta vacía.');
+    return msg;
   }
-  const data = (await resp.json()) as { choices?: { message?: ChatMessage }[]; error?: { message?: string } };
-  if (data.error) throw new Error(`OpenRouter: ${data.error.message ?? 'error desconocido'}`);
-  const msg = data.choices?.[0]?.message;
-  if (!msg) throw new Error('OpenRouter devolvió una respuesta vacía.');
-  return msg;
+  throw new Error(`El modelo de IA está saturado (${ultimoError}). Intenta de nuevo en unos segundos.`);
 }
 
 /** Ejecuta una tool call `consultar_bd` y devuelve el contenido para el rol 'tool'. */

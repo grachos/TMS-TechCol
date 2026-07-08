@@ -117,7 +117,9 @@ export function config(): AppConfig {
       habilitado: bool('CHAT_HABILITADO', false),
       apiKey: str('OPENROUTER_API_KEY', ''),
       // Free/cheap model with tool-calling support. Override via OPENROUTER_MODEL.
-      modelo: str('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3-0324:free'),
+      // When the model ends in ':free', the service adds free fallback models so
+      // a rate-limited provider auto-routes to the next one (OpenRouter `models`).
+      modelo: str('OPENROUTER_MODEL', 'meta-llama/llama-3.3-70b-instruct:free'),
       baseUrl: str('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
       maxFilas: int('CHAT_MAX_FILAS', 200),
     },
