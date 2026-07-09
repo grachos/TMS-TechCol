@@ -285,12 +285,28 @@ export default function DespachoForm() {
                     <input type="time" className="field-input" value={r.hora_cita_cargue} onChange={(e) => updRemesa(i, 'hora_cita_cargue', e.target.value)} />
                   </div>
                   <div>
+                    <label className="field-label">Horas pacto cargue</label>
+                    <input type="number" min={0} className="field-input" value={r.horas_pacto_cargue} onChange={(e) => updRemesa(i, 'horas_pacto_cargue', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="field-label">Minutos pacto cargue</label>
+                    <input type="number" min={0} max={59} className="field-input" value={r.minutos_pacto_cargue} onChange={(e) => updRemesa(i, 'minutos_pacto_cargue', e.target.value)} />
+                  </div>
+                  <div>
                     <label className="field-label">Fecha descargue</label>
                     <input type="date" className="field-input" value={r.fecha_cita_descargue} onChange={(e) => updRemesa(i, 'fecha_cita_descargue', e.target.value)} />
                   </div>
                   <div>
                     <label className="field-label">Hora descargue</label>
                     <input type="time" className="field-input" value={r.hora_cita_descargue} onChange={(e) => updRemesa(i, 'hora_cita_descargue', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="field-label">Horas pacto descargue</label>
+                    <input type="number" min={0} className="field-input" value={r.horas_pacto_descargue} onChange={(e) => updRemesa(i, 'horas_pacto_descargue', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="field-label">Minutos pacto descargue</label>
+                    <input type="number" min={0} max={59} className="field-input" value={r.minutos_pacto_descargue} onChange={(e) => updRemesa(i, 'minutos_pacto_descargue', e.target.value)} />
                   </div>
                 </div>
               </div>
