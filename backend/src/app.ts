@@ -69,19 +69,6 @@ export function createApp() {
   api.use('/chat', chatRouter);
   //   api.use('/vehiculos', vehiculoRouter) ... etc.
 
-  // TEMPORARY — remove once confirmed. Reports this server's actual outbound
-  // IP (as an external service sees it), needed to ask the Ministry's Grupo
-  // de Logística to whitelist it for RNDC access (foreign IPs are blocked by
-  // default — see docs/RNDC.md).
-  api.get(
-    '/diagnostico/ip-saliente',
-    requireRole('admin'),
-    asyncHandler(async (_req, res) => {
-      const r = await fetch('https://api.ipify.org?format=json');
-      res.json(await r.json());
-    }),
-  );
-
   app.use('/api', api);
 
   // 404 for anything under /api we didn't handle.
