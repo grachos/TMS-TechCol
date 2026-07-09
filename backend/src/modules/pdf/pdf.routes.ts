@@ -92,6 +92,10 @@ pdfManifiestoRouter.get(
     if (remesas.length === 0) throw notFound('No hay remesas asociadas.');
     const s = (await one('SELECT * FROM solicitud_servicio WHERE id = ?', [m.solicitud_id])) ?? {};
     const v = (await one('SELECT * FROM vehiculo WHERE placa = ?', [m.placa_vehiculo])) ?? {};
+    // The remolque is its own vehículo record; its weight is its own `peso_vacio`,
+    // not a value duplicated on the tractor's record.
+    const remolque = v.remolque_placa ? await one('SELECT peso_vacio FROM vehiculo WHERE placa = ?', [v.remolque_placa]) : null;
+    v.peso_vacio_remolque = remolque?.peso_vacio ?? null;
     const empresa = await empresaRepo.obtener();
 
     const pairs: [string, string][] = [

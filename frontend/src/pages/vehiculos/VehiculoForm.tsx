@@ -17,7 +17,6 @@ interface FormState {
   cod_configuracion: string;
   marca: string;
   peso_vacio: string;
-  peso_vacio_remolque: string;
   remolque_placa: string;
   tenedor_tipo_id: string;
   tenedor_num_id: string;
@@ -35,7 +34,6 @@ const EMPTY: FormState = {
   cod_configuracion: '',
   marca: '',
   peso_vacio: '',
-  peso_vacio_remolque: '',
   remolque_placa: '',
   tenedor_tipo_id: '',
   tenedor_num_id: '',
@@ -75,7 +73,6 @@ export default function VehiculoForm() {
           cod_configuracion: v.cod_configuracion ?? '',
           marca: v.marca ?? '',
           peso_vacio: v.peso_vacio != null ? String(v.peso_vacio) : '',
-          peso_vacio_remolque: v.peso_vacio_remolque != null ? String(v.peso_vacio_remolque) : '',
           remolque_placa: v.remolque_placa ?? '',
           tenedor_tipo_id: v.tenedor_tipo_id ?? '',
           tenedor_num_id: v.tenedor_num_id ?? '',
@@ -196,15 +193,9 @@ export default function VehiculoForm() {
                 onClear={() => upd('remolque_placa', '')}
                 onSelect={(it: AcItem) => upd('remolque_placa', String(it.placa ?? ''))}
               />
-            </div>
-            <div>
-              <label className="field-label">Peso vacío remolque (kg)</label>
-              <input
-                type="number"
-                className="field-input"
-                value={form.peso_vacio_remolque}
-                onChange={(e) => upd('peso_vacio_remolque', e.target.value)}
-              />
+              <p className="mt-1 text-xs text-slate-400">
+                El peso vacío del remolque se toma de su propio registro como vehículo.
+              </p>
             </div>
           </div>
         </fieldset>

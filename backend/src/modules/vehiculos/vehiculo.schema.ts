@@ -12,7 +12,6 @@ export const vehiculoUpsertSchema = z.object({
   cod_configuracion: z.string().trim().min(1, 'La configuración es obligatoria.'),
   marca: optionalStr,
   peso_vacio: z.coerce.number({ invalid_type_error: 'Peso vacío inválido.' }).int().nonnegative().nullable().optional(),
-  peso_vacio_remolque: z.coerce.number({ invalid_type_error: 'Peso vacío del remolque inválido.' }).int().nonnegative().nullable().optional(),
   remolque_placa: optionalStr,
   propietario_tipo_id: optionalStr,
   propietario_num_id: optionalStr,

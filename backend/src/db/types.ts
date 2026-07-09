@@ -59,7 +59,6 @@ export interface Vehiculo {
   cod_configuracion: string;
   marca: string | null;
   peso_vacio: number | null;
-  peso_vacio_remolque: number | null;
   propietario_tipo_id: string | null;
   propietario_num_id: string | null;
   tenedor_tipo_id: string;

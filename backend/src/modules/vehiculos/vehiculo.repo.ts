@@ -12,7 +12,7 @@ import type { Vehiculo, VehiculoListRow, Paginated } from '../../db/types.js';
 import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
 
 const CAMPOS = [
-  'placa', 'cod_configuracion', 'marca', 'peso_vacio', 'peso_vacio_remolque', 'remolque_placa',
+  'placa', 'cod_configuracion', 'marca', 'peso_vacio', 'remolque_placa',
   'propietario_tipo_id', 'propietario_num_id', 'tenedor_tipo_id', 'tenedor_num_id',
   'conductor_tipo_id', 'conductor_num_id',
   'soat_compania', 'soat_poliza', 'soat_vencimiento',
