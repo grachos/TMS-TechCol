@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Send, Loader2, FileCode, Play, X, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Send, Loader2, FileCode, Play, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import { Alert } from '../../components/Alert';
@@ -119,25 +119,6 @@ export default function ColaMonitor() {
       </div>
 
       {flash && <Alert kind={flash.kind} message={flash.message} onClose={() => setFlash(null)} />}
-
-      {data &&
-        (data.envioHabilitado ? (
-          <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">
-            <ShieldAlert size={18} />
-            <span>
-              <strong>Envío REAL habilitado.</strong> Procesar la cola escribirá documentos en el RNDC (ambiente:{' '}
-              {data.ambiente}).
-            </span>
-          </div>
-        ) : (
-          <div className="mb-4 flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 ring-1 ring-emerald-200">
-            <ShieldCheck size={18} />
-            <span>
-              <strong>Modo seguro activo.</strong> El worker arma y previsualiza el XML pero no lo envía. Define{' '}
-              <code className="rounded bg-emerald-100 px-1">COLA_ENVIO_HABILITADO=true</code> para el envío real.
-            </span>
-          </div>
-        ))}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className="text-sm text-slate-600">Proceso:</label>
