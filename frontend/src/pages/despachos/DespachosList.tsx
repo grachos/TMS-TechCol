@@ -5,8 +5,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Truck, Search, Send, Loader2, FileText, FileSpreadsheet } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Truck, Search, Send, Loader2, FileText, FileSpreadsheet, Pencil } from 'lucide-react';
 import { api, ApiError, openAuthedFile } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import { Pagination } from '../../components/Pagination';
@@ -18,6 +18,7 @@ type Row = Record<string, any>;
 
 export default function DespachosList() {
   const isAdmin = useAuthStore((s) => s.isAdmin());
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState<PagedResponse<Row> | null>(null);
   const [q, setQ] = useState(params.get('q') ?? '');
@@ -42,6 +43,19 @@ export default function DespachosList() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const ok = params.get('ok');
+    const err = params.get('err');
+    if (ok || err) {
+      setFlash({ kind: ok ? 'ok' : 'err', message: (ok ?? err)! });
+      const next = new URLSearchParams(params);
+      next.delete('ok');
+      next.delete('err');
+      setParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function procesar(manifiestoId: number) {
     setSending(manifiestoId);
@@ -137,6 +151,15 @@ export default function DespachosList() {
                             <FileSpreadsheet size={15} />
                           </button>
                         </>
+                      )}
+                      {d.manifiesto_id && d.estado_manifiesto !== 'aceptado' && (
+                        <button
+                          className="btn-ghost px-2 py-1"
+                          title="Editar despacho"
+                          onClick={() => navigate(`/despachos/${d.manifiesto_id}/editar`)}
+                        >
+                          <Pencil size={15} />
+                        </button>
                       )}
                       {isAdmin && d.manifiesto_id && (
                         <button

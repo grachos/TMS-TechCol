@@ -110,10 +110,8 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   const payload = isJson ? await res.json() : await res.text();
 
   if (!res.ok) {
-    const message =
-      isJson && payload && typeof payload === 'object' && 'error' in payload
-        ? String((payload as { error: unknown }).error)
-        : `Error ${res.status}`;
+    const body = isJson && payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
+    const message = String(body?.error ?? body?.mensaje ?? `Error ${res.status}`);
     throw new ApiError(res.status, message);
   }
   return payload as T;

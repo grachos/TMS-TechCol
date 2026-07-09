@@ -47,6 +47,7 @@ export default function App() {
       <Route path="/solicitudes/:id/editar" element={<Shell><SolicitudForm /></Shell>} />
       <Route path="/solicitudes/:id/despachar" element={<Shell><DespachoForm /></Shell>} />
       <Route path="/despachos" element={<Shell><DespachosList /></Shell>} />
+      <Route path="/despachos/:manifiestoId/editar" element={<Shell><DespachoForm /></Shell>} />
       <Route path="/cola" element={<Shell><ColaMonitor /></Shell>} />
       <Route path="/cumplido" element={<Shell><CumplidoList /></Shell>} />
       <Route path="/cumplido/:manifiestoId" element={<Shell><CumplidoForm /></Shell>} />

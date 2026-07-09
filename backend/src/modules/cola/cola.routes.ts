@@ -68,8 +68,10 @@ colaRouter.post(
   '/:id/procesar',
   requireRole('admin'),
   asyncHandler(async (req, res) => {
-    const r = await cola.procesarItem(Number(req.params.id));
-    res.status(r.ok ? 200 : 422).json(r);
+    // Always 200: { ok, mensaje } describes a normal processing outcome (success
+    // or a rejected RNDC send), not an HTTP-level error — the frontend reads
+    // `ok`/`mensaje` directly to show the flash message either way.
+    res.json(await cola.procesarItem(Number(req.params.id)));
   }),
 );
 
@@ -108,12 +110,30 @@ despachoRouter.get(
   }),
 );
 
+/** GET /api/despachos/:manifiestoId — solicitud + manifiesto + remesas, for editing. */
+despachoRouter.get(
+  '/:manifiestoId',
+  asyncHandler(async (req, res) => {
+    const data = await cola.obtenerDespacho(Number(req.params.manifiestoId));
+    if (!data) throw notFound('Despacho no encontrado.');
+    res.json(data);
+  }),
+);
+
+/** PUT /api/despachos/:manifiestoId — edit a confirmed despacho, before the RNDC accepts it. */
+despachoRouter.put(
+  '/:manifiestoId',
+  asyncHandler(async (req, res) => {
+    res.json(await cola.actualizarDespacho(Number(req.params.manifiestoId), req.body ?? {}));
+  }),
+);
+
 despachoRouter.post(
   '/:manifiestoId/procesar',
   requireRole('admin'),
   asyncHandler(async (req, res) => {
-    const r = await cola.procesarDespacho(Number(req.params.manifiestoId));
-    res.status(r.ok ? 200 : 422).json(r);
+    // Always 200 — see the note on POST /cola/:id/procesar above.
+    res.json(await cola.procesarDespacho(Number(req.params.manifiestoId)));
   }),
 );
 

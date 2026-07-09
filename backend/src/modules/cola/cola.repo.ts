@@ -16,7 +16,7 @@
  */
 
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
-import { db } from '../../db/pool.js';
+import { db, withTransaction } from '../../db/pool.js';
 import { config } from '../../config/env.js';
 import { RndcClient, type RndcVars } from '../../rndc/RndcClient.js';
 import { RndcRespuesta } from '../../rndc/RndcRespuesta.js';
@@ -624,12 +624,139 @@ export async function listarDespachosConPaginacion(
   const offset = Math.max(0, (pagina - 1) * porPagina);
   const cols = `r.id AS remesa_id, r.solicitud_id, s.consecutivo,
                 r.num_remesa, m.num_manifiesto, m.id AS manifiesto_id,
-                r.created_at, r.estado_rndc AS estado_remesa`;
+                r.created_at, r.estado_rndc AS estado_remesa, m.estado_rndc AS estado_manifiesto`;
   const [rows] = await db().query<RowDataPacket[]>(
     `SELECT ${cols} ${from} ${where} ORDER BY r.id DESC LIMIT ? OFFSET ?`,
     [...params, porPagina, offset],
   );
   return { items: rows as Row[], total };
+}
+
+/** Fetches a despacho (manifiesto + its solicitud + linked remesas), for editing. */
+export async function obtenerDespacho(manifiestoId: number): Promise<{ solicitud: Row; manifiesto: Row; remesas: Row[] } | null> {
+  const manifiesto = await fila(db(), 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
+  if (manifiesto === null) return null;
+  const solicitud = await fila(db(), 'SELECT * FROM solicitud_servicio WHERE id = ?', [manifiesto.solicitud_id]);
+  if (solicitud === null) return null;
+  const [rs] = await db().query<RowDataPacket[]>(
+    `SELECT r.* FROM remesa r
+     JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+     WHERE mr.manifiesto_id = ?
+     ORDER BY r.id`,
+    [manifiestoId],
+  );
+  return { solicitud, manifiesto, remesas: rs as Row[] };
+}
+
+async function tenedorCampo(conn: Queryable, placa: string, col: 'tenedor_tipo_id' | 'tenedor_num_id'): Promise<string | null> {
+  if (placa === '') return null;
+  const v = await fila(conn, `SELECT ${col} FROM vehiculo WHERE placa = ?`, [placa.toUpperCase()]);
+  return (v?.[col] as string | undefined) ?? null;
+}
+
+/** Editable manifiesto fields (mirrors CAMPOS_DESPACHO in solicitud.repo.ts). */
+const CAMPOS_MANIFIESTO_EDITABLES = [
+  'placa_vehiculo', 'conductor_tipo_id', 'conductor_num_id',
+  'responsable_pago_cargue', 'responsable_pago_descargue',
+  'valor_anticipo', 'emf',
+] as const;
+
+/** Editable remesa fields — everything captured on the Confirmar Despacho screen. */
+const CAMPOS_REMESA_EDITABLES = [
+  'naturaleza_carga', 'tipo_empaque', 'mercancia_codigo', 'descripcion_producto',
+  'unidad_medida', 'peso', 'valor_mercancia',
+  'remitente_tipo_id', 'remitente_num_id',
+  'destinatario_tipo_id', 'destinatario_num_id',
+  'fecha_cita_cargue', 'hora_cita_cargue', 'horas_pacto_cargue', 'minutos_pacto_cargue',
+  'fecha_cita_descargue', 'hora_cita_descargue', 'horas_pacto_descargue', 'minutos_pacto_descargue',
+] as const;
+
+/**
+ * Updates a confirmed despacho's manifiesto + remesa fields, then regenerates the
+ * still-pending queue rows' stored XML so the next send reflects the edits (the
+ * queue stores a frozen payload_xml snapshot at enqueue time — see encolar()).
+ *
+ * Gated per document: a manifiesto already 'aceptado' by the RNDC can't be
+ * edited at all; a remesa already 'aceptado' is silently left untouched (its
+ * fields are locked) while the rest of the despacho can still be corrected.
+ */
+export async function actualizarDespacho(manifiestoId: number, datos: Row): Promise<ItemResult> {
+  return withTransaction(async (conn) => {
+    const manifiesto = await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
+    if (manifiesto === null) return { ok: false, mensaje: 'Despacho no encontrado.' };
+    if (manifiesto.estado_rndc === 'aceptado') {
+      return { ok: false, mensaje: 'El manifiesto ya fue aceptado por el RNDC; no se puede editar.' };
+    }
+
+    const filaManif: Row = {};
+    for (const c of CAMPOS_MANIFIESTO_EDITABLES) {
+      const valor = datos[c];
+      filaManif[c] = valor === '' || valor === undefined || valor === null ? null : valor;
+    }
+    if (filaManif.placa_vehiculo) {
+      filaManif.titular_tipo_id = await tenedorCampo(conn, String(filaManif.placa_vehiculo), 'tenedor_tipo_id');
+      filaManif.titular_num_id = await tenedorCampo(conn, String(filaManif.placa_vehiculo), 'tenedor_num_id');
+    }
+    const setsManif = Object.keys(filaManif).map((c) => `${c} = ?`).join(', ');
+    await conn.query(`UPDATE manifiesto SET ${setsManif} WHERE id = ?`, [...Object.values(filaManif), manifiestoId]);
+
+    const remesasBody: Row[] = Array.isArray(datos.remesas) ? datos.remesas : [];
+    let omitidas = 0;
+    for (const rd of remesasBody) {
+      const rid = Number(rd.id ?? 0);
+      if (!rid) continue;
+      const actual = await fila(conn, 'SELECT estado_rndc FROM remesa WHERE id = ?', [rid]);
+      if (actual === null || actual.estado_rndc === 'aceptado') {
+        omitidas++;
+        continue;
+      }
+
+      const filaRem: Row = {};
+      for (const c of CAMPOS_REMESA_EDITABLES) {
+        const valor = rd[c];
+        filaRem[c] = valor === '' || valor === undefined || valor === null ? null : valor;
+      }
+      // cantidadCargada travels to the RNDC as the loaded quantity — the remesa's
+      // own peso, not a separate value.
+      filaRem.cantidad_cargada = filaRem.peso ?? 1;
+      if (filaRem.mercancia_codigo) {
+        const p = await fila(conn, 'SELECT codigo_un, estado_producto FROM producto WHERE codigo = ?', [filaRem.mercancia_codigo]);
+        filaRem.codigo_un = p?.codigo_un || null;
+        filaRem.estado_producto = p?.estado_producto || null;
+      }
+      const setsRem = Object.keys(filaRem).map((c) => `${c} = ?`).join(', ');
+      await conn.query(`UPDATE remesa SET ${setsRem} WHERE id = ?`, [...Object.values(filaRem), rid]);
+    }
+
+    // Regenerate the queued XML for anything not yet sent, and give it a clean
+    // slate to retry (this is exactly the recovery path for a rejected send
+    // like "Error REM382: La cantidad es muy pequeña").
+    const manifiestoActualizado = (await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]))!;
+    const [colaRows] = await conn.query<RowDataPacket[]>(
+      `SELECT * FROM cola_envios WHERE manifiesto_id = ? AND tipo_documento IN ('remesa','manifiesto') AND estado IN ('pendiente','error')`,
+      [manifiestoId],
+    );
+    for (const cr of colaRows as Row[]) {
+      let xml: string;
+      if (cr.tipo_documento === 'remesa') {
+        const rem = await fila(conn, 'SELECT * FROM remesa WHERE id = ?', [cr.referencia_id]);
+        if (rem === null) continue;
+        xml = await payloadRemesa(rem, conn);
+      } else {
+        xml = await payloadManifiesto(manifiestoActualizado, conn);
+      }
+      await conn.query(
+        `UPDATE cola_envios SET payload_xml = ?, estado = 'pendiente', ultimo_error = NULL, respuesta_rndc = NULL, programado_para = NULL WHERE id = ?`,
+        [xml, cr.id],
+      );
+    }
+
+    const mensaje =
+      omitidas > 0
+        ? `Despacho actualizado (${omitidas} remesa(s) ya aceptada(s) por el RNDC no se modificaron).`
+        : 'Despacho actualizado correctamente.';
+    return { ok: true, mensaje };
+  });
 }
 
 /** Count of remesas not yet accepted by the RNDC. Backs the "Despachos" nav badge. */

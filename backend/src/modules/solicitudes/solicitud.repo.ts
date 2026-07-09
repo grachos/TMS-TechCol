@@ -175,7 +175,9 @@ async function sembrarRemesa(conn: Queryable, solicitudId: number, rd: Row, s: R
     tipo_empaque: rd.tipo_empaque ?? null,
     mercancia_codigo: rd.mercancia_codigo ?? null,
     descripcion_producto: rd.descripcion_producto ?? null,
-    cantidad_cargada: 1,
+    // cantidadCargada travels to the RNDC as the loaded quantity — it's the
+    // remesa's own "Peso (kg)" field, not a hardcoded placeholder.
+    cantidad_cargada: rd.peso ?? 1,
     unidad_medida: rd.unidad_medida ?? null,
     peso: rd.peso ?? null,
     valor_mercancia: rd.valor_mercancia ?? null,
