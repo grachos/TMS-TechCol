@@ -69,6 +69,18 @@ function fecha(f: unknown): string | null {
   return s;
 }
 
+/**
+ * Formats a remesa's own num_remesa ("REM-00001") as the 10-digit numeric
+ * consecutivo the RNDC expects ("0000000001"). MUST be used everywhere a
+ * remesa's consecutivo is sent — the manifiesto's nested <REMESASMAN> block
+ * and the cumplido payload reference the SAME remesa, so a mismatched format
+ * there means the RNDC can't link them to the remesa already registered
+ * under proceso 3.
+ */
+function consecutivoRemesaRndc(numRemesa: unknown): string {
+  return String(parseInt(String(numRemesa ?? '0').replace(/[^0-9]/g, '') || '0', 10)).padStart(10, '0');
+}
+
 /** Inserts a queue row (uses manifiesto_id instead of remesa_id). Port of insertarCola(). */
 async function insertarCola(
   exec: Queryable,
@@ -393,7 +405,7 @@ async function sedeTercero(conn: Queryable, tipo: unknown, numero: unknown): Pro
 export async function payloadRemesa(r: Row, conn: Queryable): Promise<string> {
   const vars: RndcVars = {
     NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
-    consecutivoRemesa: String(parseInt(String(r.num_remesa ?? '0').replace(/[^0-9]/g, '') || '0', 10)).padStart(10, '0'),
+    consecutivoRemesa: consecutivoRemesaRndc(r.num_remesa),
     codOperacionTransporte: r.operacion_transporte,
     codTipoEmpaque: r.tipo_empaque || '0',
     codNaturalezaCarga: r.naturaleza_carga,
@@ -483,7 +495,7 @@ export async function payloadManifiesto(m: Row, conn: Queryable): Promise<string
   for (const rem of remesasRows as Row[]) {
     remesasXml +=
       '<REMESA><CONSECUTIVOREMESA>' +
-      RndcClient.escaparXml(String(rem.num_remesa)) +
+      RndcClient.escaparXml(consecutivoRemesaRndc(rem.num_remesa)) +
       '</CONSECUTIVOREMESA></REMESA>';
   }
 
@@ -497,7 +509,7 @@ async function payloadCumplidoRemesa(r: Row): Promise<string> {
   const vars: RndcVars = {
     NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     NUMMANIFIESTOCARGA: r.num_manifiesto ?? '',
-    CONSECUTIVOREMESA: RndcClient.escaparXml(String(r.num_remesa ?? '')),
+    CONSECUTIVOREMESA: consecutivoRemesaRndc(r.num_remesa),
     TIPOCUMPLIDOREMESA: r.cumplido_tipo ?? 'C',
     NOMUNIDADMEDIDACAPACIDAD: r.unidad_medida ?? '1',
     CANTIDADCARGADA: num(r.peso),
