@@ -22,6 +22,7 @@ import { useAuthStore } from '../store/auth';
 interface Health {
   ok: boolean;
   database: { ok: boolean };
+  rndc?: { ambiente: string; envioHabilitado: boolean };
 }
 interface Stats {
   solicitudesPorEstado: { estado: string; n: number }[];
@@ -133,20 +134,36 @@ export default function Inicio() {
         </div>
 
         <div className="card flex flex-col justify-center">
-          <div className="mb-2 flex items-center gap-2 text-celeste-600">
-            <Database size={18} /> <span className="text-sm font-medium">Base de datos</span>
+          <div className="mb-4 flex items-center gap-2 text-celeste-600">
+            <Database size={18} /> <span className="text-sm font-medium">Base de datos conectada</span>
           </div>
-          <p className="flex items-center gap-2 text-2xl font-semibold text-slate-800">
+          <p className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-800">
             {health?.database.ok ? (
               <>
-                <ShieldCheck size={22} className="text-emerald-500" /> Conectada
+                <ShieldCheck size={20} className="text-emerald-500" /> Conectada
               </>
             ) : (
               <>
-                <ShieldAlert size={22} className="text-amber-500" /> No disponible
+                <ShieldAlert size={20} className="text-amber-500" /> No disponible
               </>
             )}
           </p>
+          <div className="border-t border-slate-200 pt-3 text-xs text-slate-600">
+            <div className="mb-2">
+              <span className="font-medium">Ambiente RNDC:</span>{' '}
+              <span className={health?.rndc?.ambiente === 'produccion' ? 'font-semibold text-red-600' : 'text-amber-600'}>
+                {health?.rndc?.ambiente?.toUpperCase() ?? '—'}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Envío:</span>{' '}
+              {health?.rndc?.envioHabilitado ? (
+                <span className="font-semibold text-red-600">REAL HABILITADO</span>
+              ) : (
+                <span className="text-amber-600">Modo seguro</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

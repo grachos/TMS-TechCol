@@ -40,7 +40,16 @@ export function createApp() {
     '/api/health',
     asyncHandler(async (_req, res) => {
       const database = await dbDisponible();
-      res.json({ ok: true, app: name, database });
+      const cfg = config();
+      res.json({
+        ok: true,
+        app: name,
+        database,
+        rndc: {
+          ambiente: cfg.rndc.ambiente,
+          envioHabilitado: cfg.cola.envioHabilitado,
+        },
+      });
     }),
   );
 
