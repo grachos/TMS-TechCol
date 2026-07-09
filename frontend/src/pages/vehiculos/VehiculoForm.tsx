@@ -294,7 +294,7 @@ function TerceroPicker({
       <Autocomplete
         endpoint="/terceros/buscar"
         params={soloConductor ? { solo_conductor: 1 } : undefined}
-        placeholder="Nombre o identificación…"
+        placeholder="Nombre, apellido o identificación… (usa % o * como comodín)"
         initialLabel={initialLabel}
         onClear={onClear}
         onSelect={onSelect}

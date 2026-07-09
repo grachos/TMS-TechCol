@@ -71,13 +71,24 @@ export interface TerceroBuscarRow {
   label: string;
 }
 
-/** Autocomplete search. Port of buscar(). */
+/**
+ * Builds a SQL LIKE pattern from a user search term. Accepts SQL's own `%`
+ * (any run of characters) and `_` (single character) wildcards as-is, and
+ * also `*` as a friendlier alias for `%` since that's what most users expect
+ * from file/shell search. Always wraps with `%...%` so a plain term (no
+ * wildcards) still matches anywhere in the field.
+ */
+function likePattern(term: string): string {
+  return `%${term.replace(/\*/g, '%')}%`;
+}
+
+/** Autocomplete search. Port of buscar(). Matches name, last names, or ID. */
 export async function buscar(q: string, soloConductor = false, limite = 15): Promise<TerceroBuscarRow[]> {
   const term = q.trim();
   if (term === '') return [];
-  const like = `%${term}%`;
+  const like = likePattern(term);
   let sql =
-    `SELECT id, tipo_id, num_id, ${NOMBRE_COMPLETO_SQL} AS nombre, municipio_nombre, cod_municipio FROM tercero WHERE (nombre LIKE :like OR num_id LIKE :like)`;
+    `SELECT id, tipo_id, num_id, ${NOMBRE_COMPLETO_SQL} AS nombre, municipio_nombre, cod_municipio FROM tercero WHERE (${NOMBRE_COMPLETO_SQL} LIKE :like OR num_id LIKE :like)`;
   if (soloConductor) sql += ' AND es_conductor = 1';
   sql += ` ORDER BY nombre LIMIT ${Number(limite)}`;
   const [rows] = await db().query<(TerceroBuscarRow & RowDataPacket)[]>(sql, { like });
@@ -98,8 +109,8 @@ export async function listarConPaginacion(q = '', pagina = 1, porPagina = 10): P
   let where = '1=1';
   const params: Record<string, SqlValue> = {};
   if (q !== '') {
-    params.like = `%${q}%`;
-    where += " AND (nombre LIKE :like OR num_id LIKE :like OR CONCAT_WS(' ', tipo_id, num_id) LIKE :like)";
+    params.like = likePattern(q);
+    where += ` AND (${NOMBRE_COMPLETO_SQL} LIKE :like OR num_id LIKE :like OR CONCAT_WS(' ', tipo_id, num_id) LIKE :like)`;
   }
   const [countRows] = await db().query<(RowDataPacket & { total: number })[]>(
     `SELECT COUNT(*) AS total FROM tercero WHERE ${where}`,

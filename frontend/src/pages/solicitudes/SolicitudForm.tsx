@@ -401,7 +401,7 @@ function TerceroField({
       <label className="field-label">{label}</label>
       <Autocomplete
         endpoint="/terceros/buscar"
-        placeholder="Buscar tercero…"
+        placeholder="Nombre, apellido o identificación… (usa % o * como comodín)"
         initialLabel={initialLabel}
         onClear={onClear}
         onSelect={onSelect}

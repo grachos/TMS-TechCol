@@ -101,7 +101,7 @@ export default function TercerosList() {
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             className="field-input pl-9"
-            placeholder="Buscar por nombre o identificación…"
+            placeholder="Buscar por nombre, apellido o identificación… (usa % o * como comodín)"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
