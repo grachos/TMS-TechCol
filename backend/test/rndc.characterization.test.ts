@@ -31,6 +31,9 @@ describe('RndcClient parity with PHP', () => {
     expect(out).toBe(f.output);
   });
 
+  // Fixtures for these two were adjusted after the RNDC027 fix: the <Request>
+  // wrapper no longer escapes apostrophes, so the inner XML declaration's
+  // literal 'quotes' survive on the wire instead of becoming &apos;.
   it('construirSobreSoap (SOAP envelope) matches byte-for-byte', () => {
     const xmlInterno = rndc.construirXmlInterno(
       fixtures.construirXmlInterno!.input.tipo as string,

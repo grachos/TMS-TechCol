@@ -365,7 +365,15 @@ export class RndcClient {
 
   /** Envuelve el XML interno en el sobre SOAP 1.1 de AtenderMensajeRNDC. */
   construirSobreSoap(xmlInterno: string): string {
-    const req = RndcClient.escaparXml(xmlInterno);
+    // NOT escaparXml: <Request> content is XML *element text*, where a literal
+    // apostrophe is legal and needs no escaping. Escaping it to &apos; is what
+    // breaks CONSULTA queries — the RNDC's Delphi/BPM parser doesn't decode
+    // &apos; back to ', so filtro values like 'MAN-00001' arrive without their
+    // single quotes and it answers RNDC027. Leaving ' literal keeps it intact
+    // end-to-end with zero entity decoding. (Ingesta payloads escape their own
+    // apostrophes to &apos; in the inner XML first, so this only affects the
+    // literal quotes the consulta wrapper deliberately keeps.)
+    const req = RndcClient.escaparXmlPreservandoComillas(xmlInterno);
     return (
       '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" ' +
       'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
