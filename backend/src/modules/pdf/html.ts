@@ -36,10 +36,9 @@ const UNIDADES_ABREV: Record<string, string> = { '1': 'KGM', '2': 'GLL' };
 
 const LEGAL_TEXT =
   '"La impresión en soporte cartular (papel) de este acto administrativo producido por medios ' +
-  'electronicos en cumplimiento de la ley 527 de 1999 (Articulos 6 al 13) y de la ley 962 de 2005 ' +
-  '(Articulo 6), es una reproducción del documento original que se encuentra en formato electrónico ' +
-  'en la Base de Datos del RNDC en el Ministerio de Transporte, cuya representación digital goza de ' +
-  'autenticidad, integridad y no repudio"';
+  'electrónicos en cumplimiento de la ley 527 de 1999 (Articulos 6 a 13) y de la ley 962 de 2005 ' +
+  '(Articulo 6), es una reproducción del documento original que se encuentra en formato electrónico, ' +
+  'cuya representación digital goza de autenticidad, integridad y no repudio".';
 
 const DENUNCIA_TEXT =
   'Si es víctima de algún fraude o conoce de alguna irregularidad en el Registro Nacional de ' +
@@ -141,7 +140,7 @@ function empresaEncabezado(emp: Row, titulo: string): string {
     <div style="font-size:7.5px;">Tel: ${e(emp.telefono ?? '')} ${e(emp.municipio_nombre ?? '')}</div>`;
 }
 
-/** Faithful reproduction of the official MANIFIESTO ELECTRONICO DE CARGA (2 pages). */
+/** Faithful reproduction of the official MANIFIESTO ELECTRONICO DE CARGA (1 page). */
 export function renderManifiestoHtml(c: ManifiestoCtx): string {
   const { m, remesas, solicitud: s, vehiculo: v, empresa: emp } = c;
   const flete = Number(m.valor_flete_pactado ?? 0) || 0;
@@ -152,7 +151,6 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
   const valorNeto = flete - reteFuente - reteIca - fopat;
   const saldo = valorNeto - anticipo;
   const autoriz = m.rndc_ingreso_id ?? '';
-  const radicacion = m.created_at ? String(m.created_at).replace('T', ' ').slice(0, 16) : '';
 
   const titularTel = [c.titular?.telefono, c.titular?.celular].filter(Boolean).join(' / ');
   const conductorTel = [c.conductor?.telefono, c.conductor?.celular].filter(Boolean).join(' / ');
@@ -164,28 +162,24 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
     const empq = c.empaquePorCodigo(rem.tipo_empaque ?? '') || (rem.tipo_empaque ?? '');
     const remt = c.terceroPorTipoNum(rem.remitente_tipo_id ?? '', rem.remitente_num_id ?? '');
     const dest = c.terceroPorTipoNum(rem.destinatario_tipo_id ?? '', rem.destinatario_num_id ?? '');
+    // dueno_poliza='N': the carrier (empresa) is the policy holder; 'S': the
+    // shipper/generador holds its own policy.
+    const generador = c.terceroPorTipoNum(
+      rem.propietario_tipo_id ?? s.generador_tipo_id ?? '',
+      rem.propietario_num_id ?? s.generador_num_id ?? '',
+    );
+    const duenoPoliza = rem.dueno_poliza === 'S' ? nomTerc(generador) : (emp.razon_social ?? '');
     mercanciaRows += `<tr>
       <td>${e(rem.num_remesa ?? '')}</td>
       <td>${e(UNIDADES[rem.unidad_medida ?? ''] ?? rem.unidad_medida ?? '')}</td>
       <td class="right">${money(rem.peso)}</td>
       <td>${e(natu)}${rem.naturaleza_carga === '2' ? '<br><span class="small">Permiso INVIAS:</span>' : ''}</td>
-      <td>${e(empq)}</td>
-      <td>${e(rem.mercancia_codigo ?? '')}<br>${e(rem.descripcion_producto ?? '')}</td>
+      <td>${e(empq)}<br>${e(rem.mercancia_codigo ?? '')} ${e(rem.descripcion_producto ?? '')}</td>
       <td>${e(remt?.num_id ?? '')} ${e(nomTerc(remt))}<br>${e(remt?.direccion ?? '')} ${e(c.muniNombre(remt?.cod_municipio ?? null))}</td>
       <td>${e(dest?.num_id ?? '')} ${e(nomTerc(dest))}<br>${e(dest?.direccion ?? '')} ${e(c.muniNombre(dest?.cod_municipio ?? null))}</td>
-      <td>${e(rem.dueno_poliza === 'S' ? 'Existe póliza' : 'No existe póliza')}</td>
+      <td>${e(duenoPoliza)}</td>
     </tr>`;
   }
-
-  const anexoRows = remesas
-    .map(
-      (rem) => `<tr>
-      <td>${e(rem.num_remesa ?? '')}</td>
-      <td></td><td></td><td></td><td></td><td></td><td></td>
-      <td></td><td></td><td></td><td></td><td></td><td></td>
-    </tr>`,
-    )
-    .join('');
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>${COMMON_STYLES}
     .top-header td { border: none; vertical-align: top; }
@@ -195,8 +189,6 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
     <td width="16%">
       <div class="logo-box logo-mintransporte"><img src="${LOGO_MINTRANSPORTE}" style="width:24mm;"></div>
       <div class="logo-box logo-supertransporte"><img src="${LOGO_SUPERTRANSPORTE}" style="width:24mm;"></div>
-      <table style="margin-top:4px;"><tr><td class="lbl small">FECHA y HORA RADICACION</td></tr>
-        <tr><td class="center">${e(radicacion)}</td></tr></table>
     </td>
     <td width="46%" class="center">
       <div style="font-size:13px;font-weight:bold;">MANIFIESTO ELECTRONICO DE CARGA</div>
@@ -208,53 +200,67 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
     <td width="38%">
       <div class="legal">${LEGAL_TEXT}</div>
       ${c.qrImg ? `<div class="right"><img src="${c.qrImg}" style="width:22mm;height:22mm;"></div>` : ''}
-      <table style="margin-top:2px;"><tr><td class="header-box">Manifiesto : <span class="num">${e(m.num_manifiesto ?? '')}</span></td></tr>
-        <tr><td class="header-box">Autorización: <span class="num">${e(autoriz || '')}</span></td></tr></table>
+      <table style="margin-top:2px;"><tr><td class="header-box">Manifiesto: <span class="num">${e(m.num_manifiesto ?? '')}</span></td></tr>
+        <tr><td class="header-box">Autorización <span class="num">${e(autoriz || '')}</span></td></tr></table>
     </td>
   </tr></table>
 
   <table class="grid-table"><tr>
-    <td class="lbl">FECHA EXPEDICION</td><td class="lbl">TIPO DE MANIFIESTO</td>
-    <td class="lbl">ORIGEN DEL VIAJE</td><td class="lbl">MUNICIPIO INTERMEDIO</td><td class="lbl">DESTINO DEL VIAJE</td>
+    <td class="lbl">FECHA DE EXPEDICIÓN</td><td class="lbl">TIPO MANIFIESTO</td>
+    <td class="lbl">ORIGEN DEL VIAJE</td><td class="lbl">MUNICIPIO INTERMEDIO</td><td class="lbl">DESTINO FINAL DEL VIAJE</td>
   </tr><tr>
     <td>${e(fechaRndc(m.fecha_expedicion))}</td><td>${e(c.tipoManifiesto)}</td>
     <td>${e(c.origen)}</td><td></td><td>${e(c.destino)}</td>
   </tr></table>
 
-  <div class="section-title">INFORMACION DEL VEHICULO Y CONDUCTORES</div>
   <table class="grid-table"><tr>
-    <td class="lbl">TITULAR MANIFIESTO</td><td class="lbl">DOCUMENTO IDENTIFICACION</td>
-    <td class="lbl">DIRECCION</td><td class="lbl">TELEFONOS</td><td class="lbl">CIUDAD</td>
+    <td class="lbl" colspan="2">TRAYECTO EN VACIO ANTES DEL CARGUE: ORIGEN</td><td class="lbl" colspan="2">DESTINO</td>
+    <td class="lbl" colspan="2">TRAYECTO EN VACIO DESPUES DEL DESCARGUE: ORIGEN</td><td class="lbl" colspan="2">DESTINO</td>
+  </tr><tr>
+    <td colspan="2"></td><td colspan="2"></td><td colspan="2"></td><td colspan="2"></td>
+  </tr></table>
+
+  <div class="section-title">VIA SELECCIONADA A UTILIZAR PARA LA RUTA DEL VIAJE</div>
+  <table class="grid-table"><tr>
+    <td class="lbl" width="20%">CODIGO VIA</td><td class="lbl">DESCRIPCION RUTA</td>
+  </tr><tr>
+    <td></td><td></td>
+  </tr></table>
+
+  <div class="section-title">INFORMACION DEL VEHICULO Y CONDUCTOR</div>
+  <table class="grid-table"><tr>
+    <td class="lbl">TITULAR DEL MANIFIESTO</td><td class="lbl">DOCUMENTO</td>
+    <td class="lbl">DIRECCIÓN</td><td class="lbl">TELÉFONO</td><td class="lbl">CIUDAD</td>
   </tr><tr>
     <td>${e(nomTerc(c.titular))}</td><td>${e(c.titular?.num_id ?? '')}</td>
     <td>${e(c.titular?.direccion ?? '')}</td><td>${e(titularTel)}</td><td>${e(ciudadTexto(c.muniNombre(c.titular?.cod_municipio ?? null)))}</td>
   </tr></table>
 
   <table class="grid-table"><tr>
-    <td class="lbl">PLACA</td><td class="lbl">MARCA</td><td class="lbl">PLACA SEMIREMOLQUE</td><td class="lbl">CONFIGURACION</td>
-    <td class="lbl">PesoVacío</td><td class="lbl">PesoVacíoRemolque</td>
-    <td class="lbl">COMPAÑIA SEGUROS SOAT</td><td class="lbl">No POLIZA</td><td class="lbl">F.Vencimiento SOAT</td>
+    <td class="lbl">PLACA</td><td class="lbl">MARCA</td><td class="lbl">PLACA SEMIREMOLQUE</td><td class="lbl">CONFIGURACIÓN</td>
+    <td class="lbl">Peso Vacío</td><td class="lbl">PesoVacíoRemolque</td>
+    <td class="lbl">No. PÓLIZA</td><td class="lbl">COMPAÑÍA SEGUROS SOAT</td><td class="lbl">F.Vencim/SOAT</td>
   </tr><tr>
     <td>${e(m.placa_vehiculo ?? '')}</td><td>${e(v.marca ?? '')}</td><td>${e(v.remolque_placa ?? '')}</td><td>${e(v.cod_configuracion ?? '')}</td>
     <td>${e(v.peso_vacio ?? '')}</td><td>${e(v.peso_vacio_remolque ?? '')}</td>
-    <td>${e(v.soat_compania ?? '')}</td><td>${e(v.soat_poliza ?? '')}</td><td>${e(fechaRndc(v.soat_vencimiento))}</td>
+    <td>${e(v.soat_poliza ?? '')}</td><td>${e(v.soat_compania ?? '')}</td><td>${e(fechaRndc(v.soat_vencimiento))}</td>
   </tr></table>
 
   <table class="grid-table"><tr>
-    <td class="lbl">CONDUCTOR</td><td class="lbl">DOCUMENTO IDENTIFICACION</td><td class="lbl">DIRECCION</td>
-    <td class="lbl">TELEFONOS</td><td class="lbl">No de LICENCIA</td><td class="lbl">CIUDAD CONDUCTOR</td>
+    <td class="lbl">CONDUCTOR</td><td class="lbl">DOCUMENTO</td><td class="lbl">DIRECCIÓN</td>
+    <td class="lbl">TELÉFONO</td><td class="lbl">No. de LICENCIA</td><td class="lbl">CIUDAD</td>
   </tr><tr>
     <td>${e(nomTerc(c.conductor))}</td><td>${e(c.conductor?.num_id ?? '')}</td><td>${e(c.conductor?.direccion ?? '')}</td>
     <td>${e(conductorTel)}</td><td>${e(licenciaTexto(c.conductor))}</td><td>${e(ciudadTexto(c.muniNombre(c.conductor?.cod_municipio ?? null)))}</td>
   </tr>
-  <tr style="color:#666;"><td class="lbl">CONDUCTOR Nro. 2</td><td class="lbl">DOCUMENTO IDENTIFICACION</td><td class="lbl">DIRECCION CONDUCTOR 2</td>
-    <td class="lbl">TELEFONOS</td><td class="lbl">No de LICENCIA</td><td class="lbl">CIUDAD CONDUCTOR 2</td></tr>
+  <tr style="color:#666;"><td class="lbl">CONDUCTOR NRO 2</td><td class="lbl">DOCUMENTO</td><td class="lbl">DIRECCIÓN CONDUCTOR 2</td>
+    <td class="lbl">TELEFONO</td><td class="lbl">No. de LICENCIA</td><td class="lbl">CIUDAD CONDUCTOR 2</td></tr>
   <tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>
   </table>
 
   <table class="grid-table"><tr>
-    <td class="lbl">POSEEDOR O TENEDOR VEHICULO</td><td class="lbl">DOCUMENTO IDENTIFICACION</td>
-    <td class="lbl">DIRECCION</td><td class="lbl">TELEFONOS</td><td class="lbl">CIUDAD</td>
+    <td class="lbl">POSEEDOR O TENEDOR VEHICULO</td><td class="lbl">DOCUMENTO</td>
+    <td class="lbl">DIRECCIÓN</td><td class="lbl">TELEFONO</td><td class="lbl">CIUDAD</td>
   </tr><tr>
     <td>${e(nomTerc(c.tenedor))}</td><td>${e(c.tenedor?.num_id ?? '')}</td>
     <td>${e(c.tenedor?.direccion ?? '')}</td><td>${e(tenedorTel)}</td><td>${e(ciudadTexto(c.muniNombre(c.tenedor?.cod_municipio ?? null)))}</td>
@@ -262,14 +268,16 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
 
   <div class="section-title">INFORMACION DE LA MERCANCIA TRANSPORTADA</div>
   <table class="grid-table"><thead><tr>
-    <td class="lbl">Nro. Remesa</td><td class="lbl">Unidad Medida</td><td class="lbl">Cantidad</td><td class="lbl">Naturaleza</td>
-    <td class="lbl">Empaque</td><td class="lbl">Producto Transportado</td>
-    <td class="lbl">Información Remitente / Lugar Cargue</td><td class="lbl">Información Destinatario / Lugar Descargue</td>
+    <td class="lbl">Nro.Remesa</td><td class="lbl">UnidadMedida</td><td class="lbl">Cantidad</td><td class="lbl">Naturaleza Carga</td>
+    <td class="lbl">Empaque - Producto Transportado</td>
+    <td class="lbl">Información Remitente<br><span class="small">Identificación - Nombre - Direccion - Municipio</span></td>
+    <td class="lbl">Información Destinatario<br><span class="small">Identificación - Nombre - Direccion - Municipio</span></td>
     <td class="lbl">Dueño Poliza</td>
   </tr></thead><tbody>${mercanciaRows}</tbody></table>
 
   <table class="no-border" style="margin-top:4px;"><tr>
     <td width="45%" style="vertical-align:top;">
+      <div class="section-title">VALORES</div>
       <table class="grid-table">
         <tr><td class="lbl">VALOR TOTAL DEL VIAJE</td><td class="right">${money(flete)}</td></tr>
         <tr><td class="lbl">RETENCION EN LA FUENTE</td><td class="right">${money(reteFuente)}</td></tr>
@@ -281,14 +289,16 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
       </table>
     </td>
     <td width="55%" style="vertical-align:top;padding-left:4px;">
+      <div class="section-title">OBSERVACIONES</div>
       <table class="grid-table">
-        <tr><td class="lbl">LUGAR DE PAGO</td><td>${e(c.lugarPago)}</td><td class="lbl">FECHA</td><td>${e(fechaRndc(m.fecha_pago_saldo))}</td></tr>
+        <tr><td class="lbl">LUGAR DE PAGO</td><td>${e(c.lugarPago)}</td><td class="lbl">FECHA DE PAGO</td><td>${e(fechaRndc(m.fecha_pago_saldo))}</td></tr>
+        <tr><td class="lbl">N° Poliza</td><td>${e(emp.poliza_carga_numero ?? '')}</td><td class="lbl">Aseguradora</td><td>${e(emp.aseguradora_carga_nombre ?? '')}</td></tr>
         <tr><td class="lbl">CARGUE PAGADO POR</td><td colspan="3">${e(c.responsables[m.responsable_pago_cargue ?? ''] ?? '')}</td></tr>
         <tr><td class="lbl">DESCARGUE PAGADO POR</td><td colspan="3">${e(c.responsables[m.responsable_pago_descargue ?? ''] ?? '')}</td></tr>
+        <tr><td class="lbl">FECHA DE PAGO:</td><td colspan="3"></td></tr>
       </table>
       <table class="grid-table" style="margin-top:2px;">
-        <tr><td class="lbl">OBSERVACIONES</td></tr>
-        <tr><td style="height:20px;">${e(s.observaciones ?? '')}</td></tr>
+        <tr><td style="height:20px;">${e(m.observaciones ?? s.observaciones ?? '')}</td></tr>
       </table>
     </td>
   </tr></table>
@@ -298,53 +308,11 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
   </table>
 
   <table class="grid-table" style="margin-top:4px;"><tr>
-    <td class="small" style="width:50%;">${DENUNCIA_TEXT}</td>
-    <td class="center" style="height:40px;">Firma y Huella TITULAR MANIFIESTO o ACEPTACION DIGITAL</td>
-    <td class="center">Firma y Huella del CONDUCTOR o ACEPTACION DIGITAL</td>
+    <td class="center" style="height:40px;">FIRMA Y SELLO DE LA EMPRESA</td>
+    <td class="center">Firma TITULAR MANIFIESTO o ACEPTACION DIGITAL</td>
+    <td class="center">Firma del CONDUCTOR o ACEPTACION DIGITAL</td>
+    <td class="small" style="width:35%;">${DENUNCIA_TEXT}</td>
   </tr></table>
-
-  <div class="page-break"></div>
-
-  <table class="no-border top-header"><tr>
-    <td width="70%">
-      <div style="font-size:11px;font-weight:bold;">MANIFIESTO ELECTRONICO DE CARGA</div>
-      <div style="font-size:9px;font-weight:bold;">${e(emp.razon_social ?? '')}</div>
-      <div style="font-size:8px;">Nit: ${e(emp.nit ?? '')}</div>
-      <div style="font-size:7.5px;">${e(emp.direccion ?? '')}</div>
-      <div style="font-size:7.5px;">Tel: ${e(emp.telefono ?? '')} ${e(emp.municipio_nombre ?? '')}</div>
-      <div class="small" style="margin-top:6px;">Anexo: Tiempos y Plazos para cargue y descargue Literal 12 Art 8 Decreto 2092 de 2011</div>
-      <div class="small">Placa Vehículo : ${e(m.placa_vehiculo ?? '')} &nbsp; Nombre del Conductor: ${e(nomTerc(c.conductor))} &nbsp; CC: ${e(c.conductor?.num_id ?? '')}</div>
-    </td>
-    <td width="30%">
-      <div class="right small">Hoja 2</div>
-      <div class="small">${DENUNCIA_TEXT}</div>
-      <table style="margin-top:2px;"><tr><td class="header-box">Manifiesto : <span class="num">${e(m.num_manifiesto ?? '')}</span></td></tr>
-        <tr><td class="header-box">Autorización : <span class="num">${e(autoriz || '')}</span></td></tr></table>
-    </td>
-  </tr></table>
-
-  <table class="grid-table" style="margin-top:4px;">
-    <tr>
-      <td class="lbl" rowspan="2">Número de<br>Remesa</td>
-      <td class="lbl" colspan="2">Horas Pactadas</td>
-      <td class="lbl" colspan="2">Llegada al lugar del Cargue</td>
-      <td class="lbl" colspan="2">Salida del lugar de Cargue</td>
-      <td class="lbl" rowspan="2">Firma del<br>Remitente</td>
-      <td class="lbl" rowspan="2">Firma del<br>Conductor</td>
-      <td class="lbl" colspan="2">Llegada al lugar Descargue</td>
-      <td class="lbl" colspan="2">Salida del lugar DesCargue</td>
-      <td class="lbl" rowspan="2">Firma<br>Destinatario</td>
-      <td class="lbl" rowspan="2">Firma del<br>Conductor</td>
-    </tr>
-    <tr>
-      <td class="lbl small">Cargue</td><td class="lbl small">Descargue</td>
-      <td class="lbl small">Fecha</td><td class="lbl small">Hora</td>
-      <td class="lbl small">Fecha</td><td class="lbl small">Hora</td>
-      <td class="lbl small">Fecha</td><td class="lbl small">Hora</td>
-      <td class="lbl small">Fecha</td><td class="lbl small">Hora</td>
-    </tr>
-    ${anexoRows}
-  </table>
 
   </body></html>`;
 }
