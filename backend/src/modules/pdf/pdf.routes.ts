@@ -17,6 +17,7 @@ import * as empresaRepo from '../empresa/empresa.repo.js';
 import { renderManifiestoHtml, renderRemesaHtml } from './html.js';
 import { buildManifiestoQrText, qrPngDataUrl } from './qr.js';
 import { htmlToPdf, pdfEngineAvailable } from './render.js';
+import { consecutivoRemesaRndc } from '../../util/consecutivoRndc.js';
 
 type Row = Record<string, any>;
 
@@ -90,6 +91,9 @@ pdfManifiestoRouter.get(
       [manifiestoId],
     );
     if (remesas.length === 0) throw notFound('No hay remesas asociadas.');
+    // Show the number the RNDC actually registers this remesa under, not the
+    // internal "REM-00001" label — see consecutivoRemesaRndc().
+    for (const r of remesas) r.num_remesa = consecutivoRemesaRndc(r.num_remesa);
     const s = (await one('SELECT * FROM solicitud_servicio WHERE id = ?', [m.solicitud_id])) ?? {};
     const v = (await one('SELECT * FROM vehiculo WHERE placa = ?', [m.placa_vehiculo])) ?? {};
     // The remolque is its own vehículo record; its weight is its own `peso_vacio`,
@@ -192,6 +196,9 @@ pdfRemesaRouter.get(
     if (remesas.length === 0) throw notFound('No hay remesas asociadas.');
     const s = (await one('SELECT * FROM solicitud_servicio WHERE id = ?', [remesas[0]!.solicitud_id])) ?? {};
     const empresa = await empresaRepo.obtener();
+    // Show the number the RNDC actually registers this remesa under, not the
+    // internal "REM-00001" label — see consecutivoRemesaRndc().
+    for (const r of remesas) r.num_remesa = consecutivoRemesaRndc(r.num_remesa);
 
     const pairs: [string, string][] = [];
     const codigos: string[] = [];

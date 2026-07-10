@@ -23,6 +23,7 @@ import { RndcRespuesta } from '../../rndc/RndcRespuesta.js';
 import * as terceroRepo from '../terceros/tercero.repo.js';
 import * as vehiculoRepo from '../vehiculos/vehiculo.repo.js';
 import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
+import { consecutivoRemesaRndc } from '../../util/consecutivoRndc.js';
 
 type Queryable = Pool | PoolConnection;
 type Row = Record<string, any>;
@@ -67,18 +68,6 @@ function fecha(f: unknown): string | null {
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[3]}/${m[2]}/${m[1]}`;
   return s;
-}
-
-/**
- * Formats a remesa's own num_remesa ("REM-00001") as the 10-digit numeric
- * consecutivo the RNDC expects ("0000000001"). MUST be used everywhere a
- * remesa's consecutivo is sent — the manifiesto's nested <REMESASMAN> block
- * and the cumplido payload reference the SAME remesa, so a mismatched format
- * there means the RNDC can't link them to the remesa already registered
- * under proceso 3.
- */
-function consecutivoRemesaRndc(numRemesa: unknown): string {
-  return String(parseInt(String(numRemesa ?? '0').replace(/[^0-9]/g, '') || '0', 10)).padStart(10, '0');
 }
 
 /** Inserts a queue row (uses manifiesto_id instead of remesa_id). Port of insertarCola(). */
@@ -661,7 +650,10 @@ export async function listarDespachosConPaginacion(
     `SELECT ${cols} ${from} ${where} ORDER BY r.id DESC LIMIT ? OFFSET ?`,
     [...params, porPagina, offset],
   );
-  return { items: rows as Row[], total };
+  // Show the number the RNDC actually registers this remesa under, not the
+  // internal "REM-00001" label — see consecutivoRemesaRndc().
+  const items = (rows as Row[]).map((r) => ({ ...r, num_remesa: consecutivoRemesaRndc(r.num_remesa) }));
+  return { items, total };
 }
 
 /** Fetches a despacho (manifiesto + its solicitud + linked remesas), for editing. */
