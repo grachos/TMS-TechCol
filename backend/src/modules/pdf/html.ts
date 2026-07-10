@@ -118,7 +118,7 @@ export interface ManifiestoCtx {
   empresa: Row;
   tipoManifiesto: string;
   responsables: Record<string, string>;
-  configDsc: string;
+  configCombinada: string;
   origen: string;
   destino: string;
   lugarPago: string;
@@ -241,7 +241,7 @@ export function renderManifiestoHtml(c: ManifiestoCtx): string {
     <td class="lbl">Peso Vacío</td><td class="lbl">PesoVacíoRemolque</td>
     <td class="lbl">No. PÓLIZA</td><td class="lbl">COMPAÑÍA SEGUROS SOAT</td><td class="lbl">F.Vencim/SOAT</td>
   </tr><tr>
-    <td>${e(m.placa_vehiculo ?? '')}</td><td>${e(v.marca ?? '')}</td><td>${e(v.remolque_placa ?? '')}</td><td>${e(v.cod_configuracion ?? '')}</td>
+    <td>${e(m.placa_vehiculo ?? '')}</td><td>${e(v.marca ?? '')}</td><td>${e(v.remolque_placa ?? '')}</td><td>${e(c.configCombinada)}</td>
     <td>${e(v.peso_vacio ?? '')}</td><td>${e(v.peso_vacio_remolque ?? '')}</td>
     <td>${e(v.soat_poliza ?? '')}</td><td>${e(v.soat_compania ?? '')}</td><td>${e(fechaRndc(v.soat_vencimiento))}</td>
   </tr></table>

@@ -42,7 +42,7 @@ export async function carrocerias(): Promise<CatalogoCodigoDesc[]> {
 /** Vehicle configurations. Port of configuraciones(). */
 export async function configuraciones(): Promise<ConfiguracionVehiculo[]> {
   const [rows] = await db().query<(ConfiguracionVehiculo & RowDataPacket)[]>(
-    'SELECT codigo, nombre, descripcion FROM configuracion_vehiculo ORDER BY tipo, nombre',
+    'SELECT codigo, nombre, descripcion, tipo FROM configuracion_vehiculo ORDER BY tipo, nombre',
   );
   return rows;
 }

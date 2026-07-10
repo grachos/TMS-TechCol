@@ -118,6 +118,7 @@ export interface ConfiguracionVehiculo {
   codigo: string;
   nombre: string;
   descripcion: string;
+  tipo: string | null;
 }
 
 /** Standard paginated result envelope (mirrors listarConPaginacion). */

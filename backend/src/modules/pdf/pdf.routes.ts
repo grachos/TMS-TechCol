@@ -18,6 +18,7 @@ import { renderManifiestoHtml, renderRemesaHtml } from './html.js';
 import { buildManifiestoQrText, qrPngDataUrl } from './qr.js';
 import { htmlToPdf, pdfEngineAvailable } from './render.js';
 import { consecutivoRemesaRndc } from '../../util/consecutivoRndc.js';
+import { combinarConfiguracionVehiculo } from '../../util/configuracionVehiculo.js';
 
 type Row = Record<string, any>;
 
@@ -96,9 +97,12 @@ pdfManifiestoRouter.get(
     for (const r of remesas) r.num_remesa = consecutivoRemesaRndc(r.num_remesa);
     const s = (await one('SELECT * FROM solicitud_servicio WHERE id = ?', [m.solicitud_id])) ?? {};
     const v = (await one('SELECT * FROM vehiculo WHERE placa = ?', [m.placa_vehiculo])) ?? {};
-    // The remolque is its own vehículo record; its weight is its own `peso_vacio`,
-    // not a value duplicated on the tractor's record.
-    const remolque = v.remolque_placa ? await one('SELECT peso_vacio FROM vehiculo WHERE placa = ?', [v.remolque_placa]) : null;
+    // The remolque is its own vehículo record; its weight and configuration are
+    // its own `peso_vacio`/`cod_configuracion`, not values duplicated on the
+    // tractor's record.
+    const remolque = v.remolque_placa
+      ? await one('SELECT peso_vacio, cod_configuracion FROM vehiculo WHERE placa = ?', [v.remolque_placa])
+      : null;
     v.peso_vacio_remolque = remolque?.peso_vacio ?? null;
     const empresa = await empresaRepo.obtener();
 
@@ -133,12 +137,14 @@ pdfManifiestoRouter.get(
     const destino = lk.muniNombre(m.municipio_destino ?? null);
     const lugarPago = lk.muniNombre(m.municipio_pago_saldo ?? null);
 
-    let configDsc = '';
-    if (v.cod_configuracion) {
-      const cfgs = await catalogoRepo.configuraciones();
-      const cfg = cfgs.find((x) => x.codigo === v.cod_configuracion);
-      if (cfg) configDsc = `${cfg.nombre} - ${cfg.descripcion}`;
-    }
+    // Combined RNDC config code (e.g. "3S2", "3R2") — computed from the
+    // tractor's own configuration + its remolque's own, per
+    // combinarConfiguracionVehiculo(); never stored directly since a tractor
+    // can pair with different trailers across trips.
+    const cfgs = await catalogoRepo.configuraciones();
+    const cfgTractor = cfgs.find((x) => x.codigo === v.cod_configuracion) ?? null;
+    const cfgRemolque = remolque ? (cfgs.find((x) => x.codigo === remolque.cod_configuracion) ?? null) : null;
+    const configCombinada = combinarConfiguracionVehiculo(cfgTractor, cfgRemolque);
 
     let qrImg = '';
     if (m.rndc_ingreso_id) {
@@ -147,7 +153,7 @@ pdfManifiestoRouter.get(
         fechaExpedicion: m.fecha_expedicion ?? null,
         placa: m.placa_vehiculo ?? '',
         remolque: v.remolque_placa ?? '',
-        config: v.cod_configuracion ?? '',
+        config: configCombinada,
         origen,
         destino,
         descripcionProducto: remesas[0]?.descripcion_producto ?? '',
@@ -167,7 +173,7 @@ pdfManifiestoRouter.get(
       empresa,
       tipoManifiesto: OPS_MANIF[m.operacion_transporte ?? ''] ?? (m.operacion_transporte ?? '—'),
       responsables: RESPONSABLES,
-      configDsc,
+      configCombinada,
       origen,
       destino,
       lugarPago,
