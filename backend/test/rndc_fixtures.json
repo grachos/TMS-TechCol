@@ -36,7 +36,8 @@
             "procesoid": 4,
             "variablesXml": "<CONSECUTIVOREMESA>0000000001</CONSECUTIVOREMESA><REMESASMAN procesoid=\"43\"><REMESA><CONSECUTIVOREMESA>REM-00001</CONSECUTIVOREMESA></REMESA></REMESASMAN>"
         },
-        "output": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>1</tipo>\n    <procesoid>4</procesoid>\n  </solicitud>\n  <variables><CONSECUTIVOREMESA>0000000001</CONSECUTIVOREMESA><REMESASMAN procesoid=\"43\"><REMESA><CONSECUTIVOREMESA>REM-00001</CONSECUTIVOREMESA></REMESA></REMESASMAN></variables>\n</root>"
+        "output": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n    <ambiente>R</ambiente>\n  </acceso>\n  <solicitud>\n    <tipo>1</tipo>\n    <procesoid>4</procesoid>\n  </solicitud>\n  <variables><CONSECUTIVOREMESA>0000000001</CONSECUTIVOREMESA><REMESASMAN procesoid=\"43\"><REMESA><CONSECUTIVOREMESA>REM-00001</CONSECUTIVOREMESA></REMESA></REMESASMAN></variables>\n</root>",
+        "_note": "output hand-adjusted to include <ambiente>R</ambiente> — a Node-only addition for manifiesto (procesoid 4) payloads, not present in the legacy PHP this fixture was generated from. See RndcClient.ts envolverVariables()."
     },
     "renderVariables": {
         "input": {

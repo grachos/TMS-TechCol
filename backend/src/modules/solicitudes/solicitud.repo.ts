@@ -140,6 +140,7 @@ async function sembrarManifiesto(conn: Queryable, solicitudId: number, s: Row): 
     tipo_valor_pactado: s.tipo_valor_pactado ?? null,
     municipio_pago_saldo: s.municipio_pago_saldo ?? null,
     fecha_pago_saldo: s.fecha_pago_saldo ?? null,
+    observaciones: s.observaciones ?? null,
     nro_poliza: empresa.nro_poliza ?? null,
     emf: s.emf ?? empresa.emf ?? null,
     placa_vehiculo: s.placa_vehiculo ?? null,

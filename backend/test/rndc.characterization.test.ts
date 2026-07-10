@@ -51,7 +51,10 @@ describe('RndcClient parity with PHP', () => {
     expect(base64).toBe(fixtures.sobreSoapIso88591Base64!.output);
   });
 
-  it('previewXmlInterno (nested variables) matches byte-for-byte', () => {
+  it('previewXmlInterno (nested variables) matches byte-for-byte, plus <ambiente> for manifiesto', () => {
+    // The fixture's expected output was hand-adjusted to add <ambiente>R</ambiente>
+    // inside <acceso> — a Node-only requirement for manifiesto (procesoid 4)
+    // payloads that doesn't exist in the legacy PHP this fixture came from.
     const f = fixtures.previewXmlInterno!;
     const out = rndc.previewXmlInterno(f.input.procesoid as number, f.input.variablesXml as string);
     expect(out).toBe(f.output);

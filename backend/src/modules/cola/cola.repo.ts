@@ -475,12 +475,7 @@ export async function payloadManifiesto(m: Row, conn: Queryable): Promise<string
     FECHAPAGOSALDOMANIFIESTO: fecha(m.fecha_pago_saldo),
     CODRESPONSABLEPAGOCARGUE: m.responsable_pago_cargue,
     CODRESPONSABLEPAGODESCARGUE: m.responsable_pago_descargue,
-    TIPOVALORPACTADO: m.tipo_valor_pactado,
     MANNROPOLIZA: m.nro_poliza,
-    // NITMONITOREOFLOTA is also emitted here (renderVariables skips it when empty)
-    // AND appended explicitly below — the PHP does both, so a non-empty EMF appears
-    // twice. Preserved verbatim for byte parity with the original.
-    NITMONITOREOFLOTA: m.emf,
   };
 
   // Remesas linked to the manifiesto (nested block) — iterate the join table.
@@ -501,6 +496,9 @@ export async function payloadManifiesto(m: Row, conn: Queryable): Promise<string
 
   let xml = RndcClient.renderVariables(vars);
   xml += '<NITMONITOREOFLOTA>' + RndcClient.escaparXml(String(m.emf ?? '')) + '</NITMONITOREOFLOTA>';
+  xml += '<RETENCIONFOPAT>' + RndcClient.escaparXml(String(num(m.fopat) ?? '')) + '</RETENCIONFOPAT>';
+  xml += '<observaciones>' + RndcClient.escaparXml(String(m.observaciones ?? '')) + '</observaciones>';
+  xml += '<ACEPTACIONELECTRONICA>SI</ACEPTACIONELECTRONICA>';
   return xml + '<REMESASMAN procesoid="43">' + remesasXml + '</REMESASMAN>';
 }
 
@@ -670,7 +668,7 @@ async function tenedorCampo(conn: Queryable, placa: string, col: 'tenedor_tipo_i
 const CAMPOS_MANIFIESTO_EDITABLES = [
   'placa_vehiculo', 'conductor_tipo_id', 'conductor_num_id',
   'responsable_pago_cargue', 'responsable_pago_descargue',
-  'valor_anticipo', 'emf',
+  'valor_anticipo', 'emf', 'observaciones',
 ] as const;
 
 /** Editable remesa fields — everything captured on the Confirmar Despacho screen. */

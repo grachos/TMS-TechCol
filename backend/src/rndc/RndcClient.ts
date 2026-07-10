@@ -124,11 +124,15 @@ export class RndcClient {
 
   /** Envuelve un fragmento <variables> con <acceso>/<solicitud> (tipo 1). */
   private envolverVariables(procesoid: number, variablesXml: string): string {
+    // <ambiente>R</ambiente> is a manifiesto-only (procesoid 4) requirement —
+    // does not apply to remesa (3) or cumplido (5/6), which share this wrapper.
+    const ambiente = procesoid === 4 ? '    <ambiente>R</ambiente>\n' : '';
     return (
       "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n" +
       '  <acceso>\n' +
       '    <username>' + RndcClient.escaparXml(this.username) + '</username>\n' +
       '    <password>' + RndcClient.escaparXml(this.password) + '</password>\n' +
+      ambiente +
       '  </acceso>\n' +
       '  <solicitud>\n' +
       '    <tipo>' + TIPO_INGRESAR + '</tipo>\n' +
