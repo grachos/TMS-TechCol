@@ -250,7 +250,7 @@ export async function consultarSeguridadQr(manifiestoId: number): Promise<ItemRe
 
     const qrResp = await rndc.consultar(
       4,
-      ['INGRESOID', 'FECHAING', 'OBSERVACIONES', 'SEGURIDADOR'],
+      ['INGRESOID', 'FECHAING', 'OBSERVACIONES', 'SEGURIDADQR'],
       { NUMNITEMPRESATRANSPORTE: `'${empresa}'`, NUMMANIFIESTOCARGA: `'${manif.num_manifiesto}'` },
     );
     if (!qrResp.ok) return fallar(qrResp.error ?? 'El RNDC rechazó la consulta.');
