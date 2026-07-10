@@ -137,6 +137,20 @@ despachoRouter.post(
   }),
 );
 
+/**
+ * POST /api/despachos/:manifiestoId/consultar-qr — (re)fetch the manifiesto's
+ * RNDC security QR code. Runs automatically once on acceptance, but the RNDC's
+ * consultas server can lag behind the one that just accepted it — exposed here
+ * so a failed/delayed lookup can be retried without waiting for a new dispatch.
+ */
+despachoRouter.post(
+  '/:manifiestoId/consultar-qr',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    res.json(await cola.consultarSeguridadQr(Number(req.params.manifiestoId)));
+  }),
+);
+
 // ---- Cumplido ----
 export const cumplidoRouter = Router();
 

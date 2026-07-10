@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Truck, Search, Send, Loader2, FileText, FileSpreadsheet, Pencil } from 'lucide-react';
+import { Truck, Search, Send, Loader2, FileText, FileSpreadsheet, Pencil, QrCode } from 'lucide-react';
 import { api, ApiError, openAuthedFile } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import { Pagination } from '../../components/Pagination';
@@ -24,6 +24,7 @@ export default function DespachosList() {
   const [q, setQ] = useState(params.get('q') ?? '');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState<number | null>(null);
+  const [consultandoQr, setConsultandoQr] = useState<number | null>(null);
   const [flash, setFlash] = useState<{ kind: 'ok' | 'err'; message: string } | null>(null);
 
   const pagina = Math.max(1, Number.parseInt(params.get('p') ?? '1', 10) || 1);
@@ -68,6 +69,20 @@ export default function DespachosList() {
       setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo procesar el despacho.' });
     } finally {
       setSending(null);
+    }
+  }
+
+  async function consultarQr(manifiestoId: number) {
+    setConsultandoQr(manifiestoId);
+    setFlash(null);
+    try {
+      const r = await api<{ ok: boolean; mensaje: string }>(`/despachos/${manifiestoId}/consultar-qr`, { method: 'POST' });
+      setFlash({ kind: r.ok ? 'ok' : 'err', message: r.mensaje });
+      await load();
+    } catch (e) {
+      setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo consultar el código QR.' });
+    } finally {
+      setConsultandoQr(null);
     }
   }
 
@@ -169,6 +184,22 @@ export default function DespachosList() {
                           onClick={() => procesar(d.manifiesto_id)}
                         >
                           {sending === d.manifiesto_id ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                        </button>
+                      )}
+                      {isAdmin && d.manifiesto_id && d.estado_manifiesto === 'aceptado' && (
+                        <button
+                          className={`btn-ghost px-2 py-1 ${d.seguridadqr_error ? 'text-amber-600' : d.seguridadqr ? 'text-emerald-600' : ''}`}
+                          title={
+                            d.seguridadqr_error
+                              ? `Reintentar código QR — último error: ${d.seguridadqr_error}`
+                              : d.seguridadqr
+                                ? 'Código QR obtenido — click para volver a consultar'
+                                : 'Consultar código de seguridad QR'
+                          }
+                          disabled={consultandoQr === d.manifiesto_id}
+                          onClick={() => consultarQr(d.manifiesto_id)}
+                        >
+                          {consultandoQr === d.manifiesto_id ? <Loader2 size={15} className="animate-spin" /> : <QrCode size={15} />}
                         </button>
                       )}
                     </div>

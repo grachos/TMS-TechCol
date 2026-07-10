@@ -223,25 +223,46 @@ async function marcarOrigen(row: Row, resp: RndcRespuesta): Promise<void> {
   }
 }
 
-/** Queries the manifiesto's QR security code from the RNDC. Port of consultarSeguridadQr(). */
-async function consultarSeguridadQr(manifiestoId: number): Promise<void> {
+/**
+ * Queries the manifiesto's QR security code from the RNDC. Port of
+ * consultarSeguridadQr(), runs automatically right after the manifiesto is
+ * accepted (marcarOrigen()) — but the RNDC's consultas server can lag behind
+ * the expedir server it was just accepted on, so this is also exposed as a
+ * retryable action (POST /despachos/:id/consultar-qr) instead of a one-shot
+ * silent attempt. Any failure is stored on seguridadqr_error so it's visible
+ * instead of only reaching the server console.
+ */
+export async function consultarSeguridadQr(manifiestoId: number): Promise<ItemResult> {
+  const fallar = async (mensaje: string): Promise<ItemResult> => {
+    await db().query('UPDATE manifiesto SET seguridadqr_error = ? WHERE id = ?', [mensaje, manifiestoId]);
+    return { ok: false, mensaje };
+  };
   try {
-    const manif = await fila(db(), 'SELECT num_manifiesto FROM manifiesto WHERE id = ?', [manifiestoId]);
-    if (!manif || !manif.num_manifiesto) return;
+    const manif = await fila(db(), 'SELECT num_manifiesto, estado_rndc FROM manifiesto WHERE id = ?', [manifiestoId]);
+    if (!manif) return { ok: false, mensaje: 'Manifiesto no encontrado.' };
+    if (!manif.num_manifiesto) return fallar('El manifiesto aún no tiene número de manifiesto asignado.');
+    if (manif.estado_rndc !== 'aceptado') {
+      return fallar('El manifiesto todavía no ha sido aceptado por el RNDC.');
+    }
     const rndc = await RndcClient.desdeConfig();
     const empresa = (await obtenerEmpresa()).nit ?? '';
-    if (empresa === '') return;
+    if (empresa === '') return fallar('Falta configurar el NIT de la empresa (módulo Empresa).');
+
     const qrResp = await rndc.consultar(
       4,
       ['INGRESOID', 'FECHAING', 'OBSERVACIONES', 'SEGURIDADOR'],
       { NUMNITEMPRESATRANSPORTE: `'${empresa}'`, NUMMANIFIESTOCARGA: `'${manif.num_manifiesto}'` },
     );
+    if (!qrResp.ok) return fallar(qrResp.error ?? 'El RNDC rechazó la consulta.');
     const qr = qrResp.datos[0]?.seguridadqr;
-    if (qrResp.ok && qr) {
-      await db().query('UPDATE manifiesto SET seguridadqr = ? WHERE id = ?', [qr, manifiestoId]);
-    }
+    if (!qr) return fallar('El RNDC no devolvió el código de seguridad (posible demora del servidor de consultas).');
+
+    await db().query('UPDATE manifiesto SET seguridadqr = ?, seguridadqr_error = NULL WHERE id = ?', [qr, manifiestoId]);
+    return { ok: true, mensaje: 'Código de seguridad QR obtenido correctamente.' };
   } catch (e) {
-    console.error('Error al consultar seguridadqr:', e instanceof Error ? e.message : e);
+    const mensaje = e instanceof Error ? e.message : String(e);
+    console.error('Error al consultar seguridadqr:', mensaje);
+    return fallar(mensaje);
   }
 }
 
@@ -634,7 +655,8 @@ export async function listarDespachosConPaginacion(
   const offset = Math.max(0, (pagina - 1) * porPagina);
   const cols = `r.id AS remesa_id, r.solicitud_id, s.consecutivo,
                 r.num_remesa, m.num_manifiesto, m.id AS manifiesto_id,
-                r.created_at, r.estado_rndc AS estado_remesa, m.estado_rndc AS estado_manifiesto`;
+                r.created_at, r.estado_rndc AS estado_remesa, m.estado_rndc AS estado_manifiesto,
+                m.seguridadqr, m.seguridadqr_error`;
   const [rows] = await db().query<RowDataPacket[]>(
     `SELECT ${cols} ${from} ${where} ORDER BY r.id DESC LIMIT ? OFFSET ?`,
     [...params, porPagina, offset],
