@@ -72,7 +72,8 @@
             },
             "rango": []
         },
-        "output": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>3</tipo>\n    <procesoid>4</procesoid>\n  </solicitud>\n  <variables>INGRESOID,FECHAING,SEGURIDADOR</variables>\n  <documento>\n    <NUMNITEMPRESATRANSPORTE>&apos;900123456&apos;</NUMNITEMPRESATRANSPORTE>\n    <NUMMANIFIESTOCARGA>&apos;MAN-00001&apos;</NUMMANIFIESTOCARGA>\n  </documento>\n</root>"
+        "output": "<?xml version='1.0' encoding='ISO-8859-1'?>\n<root>\n  <acceso>\n    <username>miUsuario</username>\n    <password>miClave&amp;&lt;&gt;</password>\n  </acceso>\n  <solicitud>\n    <tipo>3</tipo>\n    <procesoid>4</procesoid>\n  </solicitud>\n  <variables>INGRESOID,FECHAING,SEGURIDADOR</variables>\n  <documento>\n    <NUMNITEMPRESATRANSPORTE>'900123456'</NUMNITEMPRESATRANSPORTE>\n    <NUMMANIFIESTOCARGA>'MAN-00001'</NUMMANIFIESTOCARGA>\n  </documento>\n</root>",
+        "_note": "output hand-adjusted to keep literal 'quotes' instead of &apos; — the legacy PHP escaped them too, which is a real bug (RNDC rejects the query with RNDC027). See RndcClient.ts escaparXmlPreservandoComillas()."
     },
     "escaparXml": {
         "input": {

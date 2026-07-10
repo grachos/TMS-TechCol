@@ -65,7 +65,10 @@ describe('RndcClient parity with PHP', () => {
     expect(RndcClient.renderVariables(f.input.vars as Record<string, string | null>)).toBe(f.output);
   });
 
-  it('construirXmlConsulta matches byte-for-byte', () => {
+  it('construirXmlConsulta matches byte-for-byte, except filtro quotes stay literal', () => {
+    // The fixture's expected output was hand-adjusted: filtro values keep their
+    // literal 'quotes' instead of the legacy PHP's &apos; — escaping them made
+    // the RNDC reject consulta requests with RNDC027.
     const f = fixtures.construirXmlConsulta!;
     const out = rndc.construirXmlConsulta(
       f.input.tipo as string,

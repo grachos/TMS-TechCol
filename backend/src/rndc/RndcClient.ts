@@ -344,13 +344,18 @@ export class RndcClient {
       if (valor === null || valor === undefined || valor === '') {
         continue;
       }
-      xml += '    <' + clave + '>' + RndcClient.escaparXml(String(valor)) + '</' + clave + '>\n';
+      // NOT escaparXml: filtro values arrive pre-wrapped in literal 'quotes'
+      // (e.g. "'MAN-00001'") — the RNDC's consulta parser expects to see that
+      // apostrophe verbatim on the wire. Escaping it to &apos; makes the RNDC
+      // reject the query with RNDC027 ("revisar los datos, en especial los
+      // alfanuméricos que deben tener comillas sencillas").
+      xml += '    <' + clave + '>' + RndcClient.escaparXmlPreservandoComillas(String(valor)) + '</' + clave + '>\n';
     }
     xml += '  </documento>\n';
     if (Object.keys(rango).length > 0) {
       xml += '  <documentorango>\n';
       for (const [clave, valor] of Object.entries(rango)) {
-        xml += '    <' + clave + '>' + RndcClient.escaparXml(String(valor ?? '')) + '</' + clave + '>\n';
+        xml += '    <' + clave + '>' + RndcClient.escaparXmlPreservandoComillas(String(valor ?? '')) + '</' + clave + '>\n';
       }
       xml += '  </documentorango>\n';
     }
@@ -452,6 +457,20 @@ export class RndcClient {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/'/g, '&apos;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Same as escaparXml but leaves literal single quotes untouched — used for
+   * consulta filtro/rango values, which arrive pre-wrapped in 'quotes' that
+   * the RNDC's parser needs to see verbatim (escaping them to &apos; triggers
+   * RNDC027). A bare apostrophe is legal, well-formed XML in element text.
+   */
+  static escaparXmlPreservandoComillas(valor: string): string {
+    return valor
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
 }
