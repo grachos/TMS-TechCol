@@ -203,7 +203,9 @@ cumplidoRouter.post(
       await conn.query(
         `UPDATE manifiesto SET cumplido_tipo = ?, fecha_entrega_documentos = ?,
            valor_adicional_flete = ?, valor_descuento_flete = ?,
-           observaciones_cumplido = ?, cumplido_estado_rndc = 'pendiente'
+           observaciones_cumplido = ?,
+           cumplido_estado_rndc = CASE WHEN cumplido_rndc_ingreso_id IS NOT NULL
+                                       THEN cumplido_estado_rndc ELSE 'pendiente' END
          WHERE id = ?`,
         [
           body.cumplido_tipo ?? 'C',
@@ -230,7 +232,8 @@ cumplidoRouter.post(
              fecha_llegada_cargue = ?, hora_llegada_cargue = ?,
              fecha_entrada_cargue = ?, hora_entrada_cargue = ?,
              fecha_salida_cargue = ?, hora_salida_cargue = ?,
-             cumplido_estado_rndc = 'pendiente'
+             cumplido_estado_rndc = CASE WHEN cumplido_rndc_ingreso_id IS NOT NULL
+                                         THEN cumplido_estado_rndc ELSE 'pendiente' END
            WHERE id = ?`,
           [
             rd.cumplido_tipo ?? 'C',

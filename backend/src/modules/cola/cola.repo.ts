@@ -191,11 +191,15 @@ export async function encolarCumplido(
   for (const rid of remesaIds) {
     const rem = await fila(conn, 'SELECT * FROM remesa WHERE id = ?', [rid]);
     if (rem === null) continue;
+    // Skip remesas already accepted by the RNDC: re-sending a cumplido that
+    // already has an ingreso id would duplicate it. Lets the user retry the
+    // manifiesto cumplido without re-queuing its already-migrated remesas.
+    if (rem.cumplido_rndc_ingreso_id) continue;
     await reemplazarColaPendiente(conn, manifiestoId, 'cumplido_remesa', rid);
     await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_remesa', rid, await payloadCumplidoRemesa(rem));
   }
   const manif = await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
-  if (manif !== null) {
+  if (manif !== null && !manif.cumplido_rndc_ingreso_id) {
     await reemplazarColaPendiente(conn, manifiestoId, 'cumplido_manifiesto', manifiestoId);
     await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_manifiesto', manifiestoId, await payloadCumplidoManifiesto(manif));
   }
