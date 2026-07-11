@@ -299,7 +299,7 @@ export default function SolicitudForm() {
                 onClear={() => set('mercancia_codigo', '')}
                 onSelect={(it) => {
                   set('mercancia_codigo', String(it.codigo ?? ''));
-                  if (it.nombre && !f.descripcion_producto) set('descripcion_producto', String(it.nombre));
+                  set('descripcion_producto', String(it.nombre ?? ''));
                 }}
               />
               {peligrosaAviso && (
