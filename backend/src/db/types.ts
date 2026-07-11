@@ -81,6 +81,8 @@ export interface VehiculoListRow {
   id: number;
   placa: string;
   cod_configuracion: string;
+  /** Readable config code ("2S", "S2", …) from configuracion_vehiculo.nombre — the raw cod_configuracion is just its catalog id. */
+  cod_configuracion_nombre: string | null;
   remolque_placa: string | null;
   tenedor_num_id: string;
   estado_rndc: EstadoMaestroRndc;

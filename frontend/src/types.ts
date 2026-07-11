@@ -76,6 +76,7 @@ export interface VehiculoListRow {
   id: number;
   placa: string;
   cod_configuracion: string;
+  cod_configuracion_nombre: string | null;
   remolque_placa: string | null;
   tenedor_num_id: string;
   estado_rndc: EstadoMaestroRndc;

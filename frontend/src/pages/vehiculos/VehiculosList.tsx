@@ -130,7 +130,7 @@ export default function VehiculosList() {
               data?.items.map((v) => (
                 <tr key={v.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className="px-4 py-3 font-mono font-semibold text-slate-800">{v.placa}</td>
-                  <td className="px-4 py-3 text-slate-600">{v.cod_configuracion}</td>
+                  <td className="px-4 py-3 text-slate-600">{v.cod_configuracion_nombre ?? v.cod_configuracion}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{v.remolque_placa ?? '—'}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{v.tenedor_num_id}</td>
                   <td className="px-4 py-3">

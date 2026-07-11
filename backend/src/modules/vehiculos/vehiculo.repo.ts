@@ -84,8 +84,12 @@ export async function listarConPaginacion(q = '', pagina = 1, porPagina = 10): P
   const total = Number(countRows[0]?.total ?? 0);
   const offset = Math.max(0, (pagina - 1) * porPagina);
   const [rows] = await db().query<(VehiculoListRow & RowDataPacket)[]>(
-    `SELECT id, placa, cod_configuracion, remolque_placa, tenedor_num_id, estado_rndc, rndc_ingreso_id
-     FROM vehiculo WHERE ${where} ORDER BY id DESC LIMIT ${Number(porPagina)} OFFSET ${Number(offset)}`,
+    `SELECT v.id, v.placa, v.cod_configuracion, cfg.nombre AS cod_configuracion_nombre,
+            v.remolque_placa, v.tenedor_num_id, v.estado_rndc, v.rndc_ingreso_id
+     FROM vehiculo v
+     LEFT JOIN configuracion_vehiculo cfg ON cfg.codigo = v.cod_configuracion
+     WHERE ${where}
+     ORDER BY v.id DESC LIMIT ${Number(porPagina)} OFFSET ${Number(offset)}`,
     params,
   );
   return { items: rows, total };
