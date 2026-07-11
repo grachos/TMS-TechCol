@@ -593,7 +593,7 @@ async function payloadCumplidoManifiesto(m: Row): Promise<string> {
   const vars: RndcVars = {
     NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     NUMMANIFIESTOCARGA: m.num_manifiesto,
-    NOMTIPOCUMPLIDOMANIFIESTO: m.cumplido_tipo ?? 'C',
+    TIPOCUMPLIDOMANIFIESTO: m.cumplido_tipo ?? 'C',
     // FOPAT (0.1% del valor a pagar) es obligatorio en el cumplido — CMA271/CMA273.
     // Reusa el valor calculado al expedir el manifiesto; se omite si no aplica (null).
     RETENCIONFOPAT: num(m.fopat),
