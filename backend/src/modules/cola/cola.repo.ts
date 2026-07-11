@@ -147,6 +147,26 @@ export async function encolar(
   await insertarCola(conn, solicitudId, manifiestoId, 'manifiesto', manifiestoId, await payloadManifiesto(manif, conn));
 }
 
+/**
+ * Removes a still-pending/errored queue row for this (manifiesto, tipo,
+ * referencia) before re-enqueuing a fresh one. The Cumplido form can be
+ * re-saved before it's actually sent (correcting a date, a value, etc.) —
+ * without this, every re-save added a brand new row instead of replacing
+ * the queued one, so the same cumplido ended up duplicated in Cola de envíos.
+ * Rows already 'enviando'/'enviado' are left alone.
+ */
+async function reemplazarColaPendiente(
+  conn: Queryable,
+  manifiestoId: number,
+  tipo: string,
+  referenciaId: number,
+): Promise<void> {
+  await conn.query(
+    `DELETE FROM cola_envios WHERE manifiesto_id = ? AND tipo_documento = ? AND referencia_id = ? AND estado IN ('pendiente','error')`,
+    [manifiestoId, tipo, referenciaId],
+  );
+}
+
 /** Enqueues cumplido documents (procesoid 5 & 6) for an accepted manifiesto. Port of encolarCumplido(). */
 export async function encolarCumplido(
   conn: Queryable,
@@ -157,10 +177,12 @@ export async function encolarCumplido(
   for (const rid of remesaIds) {
     const rem = await fila(conn, 'SELECT * FROM remesa WHERE id = ?', [rid]);
     if (rem === null) continue;
+    await reemplazarColaPendiente(conn, manifiestoId, 'cumplido_remesa', rid);
     await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_remesa', rid, await payloadCumplidoRemesa(rem));
   }
   const manif = await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
   if (manif !== null) {
+    await reemplazarColaPendiente(conn, manifiestoId, 'cumplido_manifiesto', manifiestoId);
     await insertarCola(conn, solicitudId, manifiestoId, 'cumplido_manifiesto', manifiestoId, await payloadCumplidoManifiesto(manif));
   }
 }
