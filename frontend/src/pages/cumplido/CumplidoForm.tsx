@@ -26,6 +26,10 @@ const remesaFields = (r: Record<string, any>): RemesaCumplido => ({
   hora_salida_descargue: r.hora_salida_descargue ?? '',
   fecha_llegada_cargue: r.fecha_llegada_cargue ?? '',
   hora_llegada_cargue: r.hora_llegada_cargue ?? '',
+  fecha_entrada_cargue: r.fecha_entrada_cargue ?? '',
+  hora_entrada_cargue: r.hora_entrada_cargue ?? '',
+  fecha_salida_cargue: r.fecha_salida_cargue ?? '',
+  hora_salida_cargue: r.hora_salida_cargue ?? '',
 });
 
 export default function CumplidoForm() {
@@ -151,15 +155,20 @@ export default function CumplidoForm() {
                 </div>
                 <details className="mt-3">
                   <summary className="cursor-pointer text-xs text-slate-500">Citas de cargue (si no se capturaron al crear)</summary>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="field-label">Fecha llegada cargue</label>
-                      <input type="date" className="field-input" value={r.fecha_llegada_cargue} onChange={(e) => updR(i, 'fecha_llegada_cargue', e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="field-label">Hora llegada cargue</label>
-                      <input type="time" className="field-input" value={r.hora_llegada_cargue} onChange={(e) => updR(i, 'hora_llegada_cargue', e.target.value)} />
-                    </div>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                    {([
+                      ['fecha_llegada_cargue', 'Fecha llegada', 'date'],
+                      ['hora_llegada_cargue', 'Hora llegada', 'time'],
+                      ['fecha_entrada_cargue', 'Fecha entrada', 'date'],
+                      ['hora_entrada_cargue', 'Hora entrada', 'time'],
+                      ['fecha_salida_cargue', 'Fecha salida', 'date'],
+                      ['hora_salida_cargue', 'Hora salida', 'time'],
+                    ] as const).map(([k, lbl, type]) => (
+                      <div key={k}>
+                        <label className="field-label">{lbl}</label>
+                        <input type={type} className="field-input" value={r[k]} onChange={(e) => updR(i, k, e.target.value)} />
+                      </div>
+                    ))}
                   </div>
                 </details>
               </div>

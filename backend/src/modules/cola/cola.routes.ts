@@ -228,6 +228,8 @@ cumplidoRouter.post(
              fecha_entrada_descargue = ?, hora_entrada_descargue = ?,
              fecha_salida_descargue = ?, hora_salida_descargue = ?,
              fecha_llegada_cargue = ?, hora_llegada_cargue = ?,
+             fecha_entrada_cargue = ?, hora_entrada_cargue = ?,
+             fecha_salida_cargue = ?, hora_salida_cargue = ?,
              cumplido_estado_rndc = 'pendiente'
            WHERE id = ?`,
           [
@@ -241,6 +243,10 @@ cumplidoRouter.post(
             rd.hora_salida_descargue ?? null,
             rd.fecha_llegada_cargue || null,
             rd.hora_llegada_cargue ?? null,
+            rd.fecha_entrada_cargue || null,
+            rd.hora_entrada_cargue ?? null,
+            rd.fecha_salida_cargue || null,
+            rd.hora_salida_cargue ?? null,
             rid,
           ],
         );

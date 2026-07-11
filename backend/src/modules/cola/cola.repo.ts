@@ -563,6 +563,14 @@ async function payloadCumplidoRemesa(r: Row): Promise<string> {
     xml += '<FECHALLEGADACARGUE>' + fecha(r.fecha_llegada_cargue) + '</FECHALLEGADACARGUE>';
     xml += '<HORALLEGADACARGUEREMESA>' + RndcClient.escaparXml(String(r.hora_llegada_cargue ?? '')) + '</HORALLEGADACARGUEREMESA>';
   }
+  if (r.fecha_entrada_cargue) {
+    xml += '<FECHAENTRADACARGUE>' + fecha(r.fecha_entrada_cargue) + '</FECHAENTRADACARGUE>';
+    xml += '<HORAENTRADACARGUEREMESA>' + RndcClient.escaparXml(String(r.hora_entrada_cargue ?? '')) + '</HORAENTRADACARGUEREMESA>';
+  }
+  if (r.fecha_salida_cargue) {
+    xml += '<FECHASALIDACARGUE>' + fecha(r.fecha_salida_cargue) + '</FECHASALIDACARGUE>';
+    xml += '<HORASALIDACARGUEREMESA>' + RndcClient.escaparXml(String(r.hora_salida_cargue ?? '')) + '</HORASALIDACARGUEREMESA>';
+  }
   return xml;
 }
 
