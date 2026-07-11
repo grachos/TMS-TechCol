@@ -14,7 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft, Loader2, Plus, Trash2, Truck, Lock } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Plus, Trash2, Truck, Lock, Scale } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { Autocomplete } from '../../components/Autocomplete';
 import { Alert } from '../../components/Alert';
@@ -111,6 +111,7 @@ export default function DespachoForm() {
           setAnticipo(m.valor_anticipo != null ? String(m.valor_anticipo) : '');
           setEmf(m.emf ?? '');
           setRemesas(data.remesas.length > 0 ? data.remesas.map(remesaDesde) : [remesaDesde()]);
+          setSol(data.solicitud);
         } else {
           const { solicitud } = await api<{ solicitud: Record<string, any> }>(`/solicitudes/${id}`);
           setSol(solicitud);
@@ -155,6 +156,13 @@ export default function DespachoForm() {
       setError('Placa y conductor son obligatorios para despachar.');
       return;
     }
+    if (pesoExcedido) {
+      setError(
+        `El peso de las remesas (${pesoEnFormulario.toLocaleString('es-CO')} kg) supera el peso disponible ` +
+          `(${pesoDisponible.toLocaleString('es-CO')} kg) de esta solicitud. Ajusta el peso de las remesas antes de continuar.`,
+      );
+      return;
+    }
     setSaving(true);
     try {
       const body = {
@@ -195,6 +203,11 @@ export default function DespachoForm() {
 
   const volver = () => navigate(editar ? '/despachos' : `/solicitudes/${id}`);
 
+  const pesoTotalSolicitud = Number(sol?.peso ?? 0);
+  const pesoDisponible = sol?.peso_disponible != null ? Number(sol.peso_disponible) : pesoTotalSolicitud;
+  const pesoEnFormulario = remesas.reduce((acc, r) => acc + (Number(r.peso) || 0), 0);
+  const pesoExcedido = pesoTotalSolicitud > 0 && pesoEnFormulario - pesoDisponible > 0.001;
+
   return (
     <div className="mx-auto max-w-3xl">
       <button onClick={volver} className="mb-3 flex items-center gap-1 text-sm text-celeste-700">
@@ -204,7 +217,7 @@ export default function DespachoForm() {
         <Truck size={20} className="text-celeste-600" /> {editar ? `Editar despacho · Manifiesto #${manifiestoId}` : `Confirmar despacho · Solicitud #${id}`}
       </h1>
       {editar ? (
-        <p className="mb-4 text-sm text-slate-500">
+        <p className="mb-1 text-sm text-slate-500">
           Corrige los datos de este despacho. Al guardar se regenera el XML pendiente de envío para reflejar los cambios.
         </p>
       ) : (
@@ -212,8 +225,30 @@ export default function DespachoForm() {
           <p className="mb-1 text-sm text-slate-500">
             Al confirmar se completa el manifiesto, se crean las remesas y se encolan (tercero → vehículo → remesas → manifiesto).
           </p>
-          <p className="mb-4 text-sm font-medium text-slate-600">Vehículos restantes: {sol?.cantidad_vehiculos ?? 1}</p>
+          <p className="mb-1 text-sm font-medium text-slate-600">Vehículos restantes: {sol?.cantidad_vehiculos ?? 1}</p>
         </>
+      )}
+
+      {pesoTotalSolicitud > 0 && (
+        <div
+          className={`mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-sm ring-1 ${
+            pesoExcedido ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-slate-50 text-slate-600 ring-slate-200'
+          }`}
+        >
+          <Scale size={16} className="shrink-0" />
+          <span>
+            Peso de la solicitud: <strong>{pesoTotalSolicitud.toLocaleString('es-CO')} kg</strong>
+          </span>
+          <span>·</span>
+          <span>
+            Disponible para este despacho: <strong>{pesoDisponible.toLocaleString('es-CO')} kg</strong>
+          </span>
+          <span>·</span>
+          <span>
+            En este formulario: <strong>{pesoEnFormulario.toLocaleString('es-CO')} kg</strong>
+          </span>
+          {pesoExcedido && <strong>— supera el peso disponible, ajusta las remesas antes de guardar.</strong>}
+        </div>
       )}
 
       {error && <Alert kind="err" message={error} onClose={() => setError(null)} />}

@@ -73,7 +73,10 @@ export default function SolicitudDetalle() {
   if (!data) return null;
 
   const s = data.solicitud;
-  const despachable = s.estado !== 'despachada' && Number(s.cantidad_vehiculos ?? 1) >= 1;
+  const pesoTotal = Number(s.peso ?? 0);
+  const pesoDisponible = s.peso_disponible != null ? Number(s.peso_disponible) : pesoTotal;
+  const despachable =
+    s.estado !== 'despachada' && Number(s.cantidad_vehiculos ?? 1) >= 1 && (pesoTotal <= 0 || pesoDisponible > 0);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -115,6 +118,17 @@ export default function SolicitudDetalle() {
           <Field label="Retención ICA" value={money(s.retencion_ica)} />
           <Field label="Retención fuente" value={money(s.retencion_fuente)} />
           <Field label="Vehículos" value={`${Math.max(0, Number(s.cantidad_vehiculos_original ?? 0) - Number(s.cantidad_vehiculos ?? 0))}/${s.cantidad_vehiculos_original ?? s.cantidad_vehiculos ?? 1}`} />
+          {pesoTotal > 0 && (
+            <Field
+              label="Peso"
+              value={
+                <span className={pesoDisponible <= 0 ? 'font-semibold text-amber-600' : undefined}>
+                  {(pesoTotal - pesoDisponible).toLocaleString('es-CO')} / {pesoTotal.toLocaleString('es-CO')} kg
+                  {pesoDisponible <= 0 && ' — capacidad agotada'}
+                </span>
+              }
+            />
+          )}
         </dl>
       </div>
 

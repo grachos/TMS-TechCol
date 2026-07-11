@@ -24,6 +24,7 @@ import * as terceroRepo from '../terceros/tercero.repo.js';
 import * as vehiculoRepo from '../vehiculos/vehiculo.repo.js';
 import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
 import { consecutivoRemesaRndc } from '../../util/consecutivoRndc.js';
+import { pesoAsignadoSolicitud, pesoTotalDe } from '../../util/pesoSolicitud.js';
 
 type Queryable = Pool | PoolConnection;
 type Row = Record<string, any>;
@@ -669,6 +670,12 @@ export async function obtenerDespacho(manifiestoId: number): Promise<{ solicitud
      ORDER BY r.id`,
     [manifiestoId],
   );
+  // Weight budget: exclude this manifiesto's own remesas so editing them
+  // doesn't count against itself.
+  const pesoAsignado = await pesoAsignadoSolicitud(db(), Number(manifiesto.solicitud_id), manifiestoId);
+  solicitud.peso_asignado = pesoAsignado;
+  solicitud.peso_disponible = Number(solicitud.peso ?? 0) - pesoAsignado;
+
   return { solicitud, manifiesto, remesas: rs as Row[] };
 }
 
@@ -712,6 +719,27 @@ export async function actualizarDespacho(manifiestoId: number, datos: Row): Prom
       return { ok: false, mensaje: 'El manifiesto ya fue aceptado por el RNDC; no se puede editar.' };
     }
 
+    const remesasBody: Row[] = Array.isArray(datos.remesas) ? datos.remesas : [];
+
+    // Weight budget: don't let an edit push this despacho's total weight past
+    // what the solicitud has left available (its own current remesas are
+    // excluded from "already assigned", since they're being replaced here).
+    const solicitud = await fila(conn, 'SELECT peso FROM solicitud_servicio WHERE id = ?', [manifiesto.solicitud_id]);
+    const pesoTotalSolicitud = Number(solicitud?.peso ?? 0);
+    if (pesoTotalSolicitud > 0) {
+      const pesoNuevo = pesoTotalDe(remesasBody);
+      const asignadoOtros = await pesoAsignadoSolicitud(conn, Number(manifiesto.solicitud_id), manifiestoId);
+      const disponible = pesoTotalSolicitud - asignadoOtros;
+      if (pesoNuevo - disponible > 0.001) {
+        return {
+          ok: false,
+          mensaje:
+            `El peso de las remesas (${pesoNuevo.toLocaleString('es-CO')} kg) supera el peso disponible ` +
+            `(${disponible.toLocaleString('es-CO')} kg) de esta solicitud.`,
+        };
+      }
+    }
+
     const filaManif: Row = {};
     for (const c of CAMPOS_MANIFIESTO_EDITABLES) {
       const valor = datos[c];
@@ -724,7 +752,6 @@ export async function actualizarDespacho(manifiestoId: number, datos: Row): Prom
     const setsManif = Object.keys(filaManif).map((c) => `${c} = ?`).join(', ');
     await conn.query(`UPDATE manifiesto SET ${setsManif} WHERE id = ?`, [...Object.values(filaManif), manifiestoId]);
 
-    const remesasBody: Row[] = Array.isArray(datos.remesas) ? datos.remesas : [];
     let omitidas = 0;
     for (const rd of remesasBody) {
       const rid = Number(rd.id ?? 0);

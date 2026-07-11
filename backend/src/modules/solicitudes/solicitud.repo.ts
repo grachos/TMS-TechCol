@@ -12,6 +12,7 @@ import { db, withTransaction } from '../../db/pool.js';
 import * as terceroRepo from '../terceros/tercero.repo.js';
 import * as empresaRepo from '../empresa/empresa.repo.js';
 import * as cola from '../cola/cola.repo.js';
+import { pesoAsignadoSolicitud } from '../../util/pesoSolicitud.js';
 
 type Queryable = Pool | PoolConnection;
 type Row = Record<string, any>;
@@ -363,5 +364,13 @@ export async function obtener(
     );
     remesas = rs as Row[];
   }
+
+  // Weight budget: how much of the solicitud's declared peso is already
+  // committed to remesas (excluding the manifiesto being viewed/edited, if
+  // any, since its own weight shouldn't count against itself).
+  const pesoAsignado = await pesoAsignadoSolicitud(db(), id, manifiestoId);
+  solicitud.peso_asignado = pesoAsignado;
+  solicitud.peso_disponible = Number(solicitud.peso ?? 0) - pesoAsignado;
+
   return { solicitud, manifiesto, remesas };
 }
