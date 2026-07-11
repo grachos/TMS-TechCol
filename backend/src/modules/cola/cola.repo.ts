@@ -71,6 +71,20 @@ function fecha(f: unknown): string | null {
   return s;
 }
 
+/**
+ * Normalizes an hora value to the RNDC military format hh:mm (two digits each),
+ * dropping any seconds. A TIME column / picker can yield "15:00:00", which the
+ * RNDC rejects (CRE090/120/150 expect exactly hh:mm).
+ */
+function hora(h: unknown): string {
+  if (h === null || h === undefined) return '';
+  const s = String(h).trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return s;
+  const [, hh, mm] = m;
+  return `${hh!.padStart(2, '0')}:${mm}`;
+}
+
 /** Inserts a queue row (uses manifiesto_id instead of remesa_id). Port of insertarCola(). */
 async function insertarCola(
   exec: Queryable,
@@ -459,11 +473,11 @@ export async function payloadRemesa(r: Row, conn: Queryable): Promise<string> {
     horasPactoCarga: r.horas_pacto_cargue ?? '1',
     minutospactocarga: r.minutos_pacto_cargue ?? '0',
     fechaCitaPactadaCargue: fecha(r.fecha_cita_cargue),
-    horaCitaPactadaCargue: r.hora_cita_cargue,
+    horaCitaPactadaCargue: hora(r.hora_cita_cargue),
     horasPactoDescargue: r.horas_pacto_descargue,
     minutosPactoDescargue: r.minutos_pacto_descargue ?? '0',
     fechaCitaPactadaDescargue: fecha(r.fecha_cita_descargue),
-    horaCitaPactadaDescargueRemesa: r.hora_cita_descargue,
+    horaCitaPactadaDescargueRemesa: hora(r.hora_cita_descargue),
     codSedePropietario: await sedeTercero(conn, r.propietario_tipo_id, r.propietario_num_id),
     CODIGOUN: r.codigo_un,
     ESTADOMERCANCIA: r.estado_producto,
@@ -549,27 +563,27 @@ async function payloadCumplidoRemesa(r: Row): Promise<string> {
   let xml = RndcClient.renderVariables(vars);
   if (r.fecha_llegada_descargue) {
     xml += '<FECHALLEGADADESCARGUE>' + fecha(r.fecha_llegada_descargue) + '</FECHALLEGADADESCARGUE>';
-    xml += '<HORALLEGADADESCARGUECUMPLIDO>' + RndcClient.escaparXml(String(r.hora_llegada_descargue ?? '')) + '</HORALLEGADADESCARGUECUMPLIDO>';
+    xml += '<HORALLEGADADESCARGUECUMPLIDO>' + hora(r.hora_llegada_descargue) + '</HORALLEGADADESCARGUECUMPLIDO>';
   }
   if (r.fecha_entrada_descargue) {
     xml += '<FECHAENTRADADESCARGUE>' + fecha(r.fecha_entrada_descargue) + '</FECHAENTRADADESCARGUE>';
-    xml += '<HORAENTRADADESCARGUECUMPLIDO>' + RndcClient.escaparXml(String(r.hora_entrada_descargue ?? '')) + '</HORAENTRADADESCARGUECUMPLIDO>';
+    xml += '<HORAENTRADADESCARGUECUMPLIDO>' + hora(r.hora_entrada_descargue) + '</HORAENTRADADESCARGUECUMPLIDO>';
   }
   if (r.fecha_salida_descargue) {
     xml += '<FECHASALIDADESCARGUE>' + fecha(r.fecha_salida_descargue) + '</FECHASALIDADESCARGUE>';
-    xml += '<HORASALIDADESCARGUECUMPLIDO>' + RndcClient.escaparXml(String(r.hora_salida_descargue ?? '')) + '</HORASALIDADESCARGUECUMPLIDO>';
+    xml += '<HORASALIDADESCARGUECUMPLIDO>' + hora(r.hora_salida_descargue) + '</HORASALIDADESCARGUECUMPLIDO>';
   }
   if (r.fecha_llegada_cargue) {
     xml += '<FECHALLEGADACARGUE>' + fecha(r.fecha_llegada_cargue) + '</FECHALLEGADACARGUE>';
-    xml += '<HORALLEGADACARGUEREMESA>' + RndcClient.escaparXml(String(r.hora_llegada_cargue ?? '')) + '</HORALLEGADACARGUEREMESA>';
+    xml += '<HORALLEGADACARGUEREMESA>' + hora(r.hora_llegada_cargue) + '</HORALLEGADACARGUEREMESA>';
   }
   if (r.fecha_entrada_cargue) {
     xml += '<FECHAENTRADACARGUE>' + fecha(r.fecha_entrada_cargue) + '</FECHAENTRADACARGUE>';
-    xml += '<HORAENTRADACARGUEREMESA>' + RndcClient.escaparXml(String(r.hora_entrada_cargue ?? '')) + '</HORAENTRADACARGUEREMESA>';
+    xml += '<HORAENTRADACARGUEREMESA>' + hora(r.hora_entrada_cargue) + '</HORAENTRADACARGUEREMESA>';
   }
   if (r.fecha_salida_cargue) {
     xml += '<FECHASALIDACARGUE>' + fecha(r.fecha_salida_cargue) + '</FECHASALIDACARGUE>';
-    xml += '<HORASALIDACARGUEREMESA>' + RndcClient.escaparXml(String(r.hora_salida_cargue ?? '')) + '</HORASALIDACARGUEREMESA>';
+    xml += '<HORASALIDACARGUEREMESA>' + hora(r.hora_salida_cargue) + '</HORASALIDACARGUEREMESA>';
   }
   return xml;
 }
