@@ -19,13 +19,14 @@
 
 import { Router } from 'express';
 import { asyncHandler, badRequest, notFound } from '../../http/errors.js';
-import { requireRole } from '../auth/auth.middleware.js';
+import { requireRole, requirePagina } from '../auth/auth.middleware.js';
 import { config } from '../../config/env.js';
 import { db, withTransaction } from '../../db/pool.js';
 import type { RowDataPacket } from 'mysql2';
 import * as cola from './cola.repo.js';
 
 export const colaRouter = Router();
+colaRouter.use(requirePagina('cola'));
 
 const validProceso = (p: unknown): 'todos' | 'despacho' | 'cumplido' =>
   p === 'despacho' || p === 'cumplido' ? p : 'todos';
@@ -85,6 +86,7 @@ colaRouter.get(
 
 // ---- Despachos ----
 export const despachoRouter = Router();
+despachoRouter.use(requirePagina('despachos'));
 
 despachoRouter.get(
   '/',
@@ -153,6 +155,7 @@ despachoRouter.post(
 
 // ---- Cumplido ----
 export const cumplidoRouter = Router();
+cumplidoRouter.use(requirePagina('cumplido'));
 
 cumplidoRouter.get(
   '/',

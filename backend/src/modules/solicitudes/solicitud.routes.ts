@@ -11,9 +11,11 @@ import { Router } from 'express';
 import { asyncHandler, badRequest, notFound } from '../../http/errors.js';
 import { validarProductoPeligrosa } from '../../util/validaciones.js';
 import { pesoTotalDe } from '../../util/pesoSolicitud.js';
+import { requirePagina } from '../auth/auth.middleware.js';
 import * as repo from './solicitud.repo.js';
 
 export const solicitudRouter = Router();
+solicitudRouter.use(requirePagina('solicitudes'));
 
 solicitudRouter.get(
   '/',

@@ -4,13 +4,15 @@
 
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { config } from '../../config/env.js';
-import type { Rol } from './auth.repo.js';
+import type { Rol, Pagina } from './auth.repo.js';
 
 export interface JwtPayload {
   sub: number; // staff user id
   email: string;
   nombre: string;
   rol: Rol;
+  /** Allowed pages for rol='operador'; null = all. Ignored for 'admin'. */
+  paginas: Pagina[] | null;
 }
 
 /** Signs an access token for a staff user. */

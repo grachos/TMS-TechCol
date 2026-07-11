@@ -10,6 +10,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler, badRequest, notFound } from '../../http/errors.js';
+import { requirePagina } from '../auth/auth.middleware.js';
 import * as repo from './catalogo.repo.js';
 
 export const catalogoRouter = Router();
@@ -28,6 +29,7 @@ export const productoRouter = Router();
 /** GET /api/productos?q=&p= */
 productoRouter.get(
   '/',
+  requirePagina('productos'),
   asyncHandler(async (req, res) => {
     const q = String(req.query.q ?? '');
     const pagina = Math.max(1, Number.parseInt(String(req.query.p ?? '1'), 10) || 1);
@@ -58,6 +60,7 @@ productoRouter.get(
 /** PUT /api/productos/:codigo */
 productoRouter.put(
   '/:codigo',
+  requirePagina('productos'),
   asyncHandler(async (req, res) => {
     const codigo = String(req.params.codigo);
     const existing = await repo.productoPorCodigo(codigo);

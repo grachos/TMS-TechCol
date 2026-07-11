@@ -12,7 +12,7 @@
 
 import { Router } from 'express';
 import { asyncHandler, badRequest, notFound } from '../../http/errors.js';
-import { requireRole } from '../auth/auth.middleware.js';
+import { requireRole, requirePagina } from '../auth/auth.middleware.js';
 import { terceroUpsertSchema } from './tercero.schema.js';
 import * as repo from './tercero.repo.js';
 
@@ -21,6 +21,7 @@ export const terceroRouter = Router();
 /** GET /api/terceros?q=&p= */
 terceroRouter.get(
   '/',
+  requirePagina('terceros'),
   asyncHandler(async (req, res) => {
     const q = String(req.query.q ?? '');
     const pagina = Math.max(1, Number.parseInt(String(req.query.p ?? '1'), 10) || 1);
@@ -54,6 +55,7 @@ terceroRouter.get(
 /** GET /api/terceros/:id */
 terceroRouter.get(
   '/:id',
+  requirePagina('terceros'),
   asyncHandler(async (req, res) => {
     const t = await repo.obtener(Number(req.params.id));
     if (!t) throw notFound('Tercero no encontrado.');
@@ -64,6 +66,7 @@ terceroRouter.get(
 /** POST /api/terceros */
 terceroRouter.post(
   '/',
+  requirePagina('terceros'),
   asyncHandler(async (req, res) => {
     const parsed = terceroUpsertSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest(parsed.error.issues[0]?.message ?? 'Datos inválidos.');
@@ -75,6 +78,7 @@ terceroRouter.post(
 /** PUT /api/terceros/:id */
 terceroRouter.put(
   '/:id',
+  requirePagina('terceros'),
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const existing = await repo.obtener(id);

@@ -9,10 +9,12 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../http/errors.js';
 import { toCsv, type CsvColumn } from '../../util/csv.js';
+import { requirePagina } from '../auth/auth.middleware.js';
 import * as repo from './informe.repo.js';
 import type { InformeRow, InformeFiltros, InformeNivel } from './informe.repo.js';
 
 export const informeRouter = Router();
+informeRouter.use(requirePagina('informe'));
 
 /** Columns for the remesa (detail) level. */
 const COLUMNS_REMESA: CsvColumn<InformeRow>[] = [

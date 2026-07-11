@@ -12,7 +12,7 @@
 
 import { Router } from 'express';
 import { asyncHandler, badRequest, notFound } from '../../http/errors.js';
-import { requireRole } from '../auth/auth.middleware.js';
+import { requireRole, requirePagina } from '../auth/auth.middleware.js';
 import { vehiculoUpsertSchema } from './vehiculo.schema.js';
 import * as repo from './vehiculo.repo.js';
 
@@ -20,6 +20,7 @@ export const vehiculoRouter = Router();
 
 vehiculoRouter.get(
   '/',
+  requirePagina('vehiculos'),
   asyncHandler(async (req, res) => {
     const q = String(req.query.q ?? '');
     const pagina = Math.max(1, Number.parseInt(String(req.query.p ?? '1'), 10) || 1);
@@ -58,6 +59,7 @@ vehiculoRouter.get(
 
 vehiculoRouter.get(
   '/:id',
+  requirePagina('vehiculos'),
   asyncHandler(async (req, res) => {
     const v = await repo.obtener(Number(req.params.id));
     if (!v) throw notFound('Vehículo no encontrado.');
@@ -67,6 +69,7 @@ vehiculoRouter.get(
 
 vehiculoRouter.post(
   '/',
+  requirePagina('vehiculos'),
   asyncHandler(async (req, res) => {
     const parsed = vehiculoUpsertSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest(parsed.error.issues[0]?.message ?? 'Datos inválidos.');
@@ -77,6 +80,7 @@ vehiculoRouter.post(
 
 vehiculoRouter.put(
   '/:id',
+  requirePagina('vehiculos'),
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const existing = await repo.obtener(id);

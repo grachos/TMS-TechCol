@@ -27,6 +27,7 @@ import { pdfManifiestoRouter, pdfRemesaRouter } from './modules/pdf/pdf.routes.j
 import { statsRouter } from './modules/stats/stats.routes.js';
 import { informeRouter } from './modules/informe/informe.routes.js';
 import { chatRouter } from './modules/chat/chat.routes.js';
+import { usuarioRouter } from './modules/usuarios/usuario.routes.js';
 
 export function createApp() {
   const app = express();
@@ -76,6 +77,7 @@ export function createApp() {
   api.use('/stats', statsRouter);
   api.use('/informe', informeRouter);
   api.use('/chat', chatRouter);
+  api.use('/usuarios', usuarioRouter);
   //   api.use('/vehiculos', vehiculoRouter) ... etc.
 
   app.use('/api', api);

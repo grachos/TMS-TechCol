@@ -18,12 +18,13 @@ import {
   Package,
   Building2,
   FileBarChart2,
+  UsersRound,
   LogOut,
   Menu,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useAuthStore } from '../store/auth';
+import { useAuthStore, type Pagina } from '../store/auth';
 import { api } from '../lib/api';
 import { ChatWidget } from './ChatWidget';
 
@@ -34,6 +35,10 @@ interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Page permission required to see this item; omitted = always visible (e.g. Inicio). */
+  pagina?: Pagina;
+  /** Only shown to rol='admin', regardless of paginas. */
+  adminOnly?: boolean;
 }
 
 /** Polls a `{ pendientes }` count endpoint every BADGE_POLL_MS. */
@@ -63,29 +68,39 @@ const NAV: { section?: string; items: NavItem[] }[] = [
   {
     items: [
       { to: '/', label: 'Inicio', icon: LayoutDashboard },
-      { to: '/solicitudes', label: 'Solicitudes', icon: FileText },
-      { to: '/despachos', label: 'Despachos', icon: Truck },
-      { to: '/cola', label: 'Cola de envíos', icon: Send },
-      { to: '/cumplido', label: 'Cumplido', icon: CheckCircle2 },
-      { to: '/informe', label: 'Informe', icon: FileBarChart2 },
+      { to: '/solicitudes', label: 'Solicitudes', icon: FileText, pagina: 'solicitudes' },
+      { to: '/despachos', label: 'Despachos', icon: Truck, pagina: 'despachos' },
+      { to: '/cola', label: 'Cola de envíos', icon: Send, pagina: 'cola' },
+      { to: '/cumplido', label: 'Cumplido', icon: CheckCircle2, pagina: 'cumplido' },
+      { to: '/informe', label: 'Informe', icon: FileBarChart2, pagina: 'informe' },
     ],
   },
   {
     section: 'Maestros',
     items: [
-      { to: '/terceros', label: 'Terceros', icon: Users },
-      { to: '/vehiculos', label: 'Vehículos', icon: Truck },
-      { to: '/productos', label: 'Productos', icon: Package },
-      { to: '/empresa', label: 'Empresa', icon: Building2 },
+      { to: '/terceros', label: 'Terceros', icon: Users, pagina: 'terceros' },
+      { to: '/vehiculos', label: 'Vehículos', icon: Truck, pagina: 'vehiculos' },
+      { to: '/productos', label: 'Productos', icon: Package, pagina: 'productos' },
+      { to: '/empresa', label: 'Empresa', icon: Building2, pagina: 'empresa' },
+      { to: '/usuarios', label: 'Usuarios', icon: UsersRound, adminOnly: true },
     ],
   },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  const { user, logout } = useAuthStore();
+  const { user, logout, canAccess, isAdmin } = useAuthStore();
   const navigate = useNavigate();
   const [colaPendientes, setColaPendientes] = useState(0);
+
+  const visibleNav = NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (item.adminOnly) return isAdmin();
+      if (item.pagina) return canAccess(item.pagina);
+      return true;
+    }),
+  })).filter((group) => group.items.length > 0);
 
   // Poll the queue's pending/error count for the "Cola de envíos" nav badge.
   useEffect(() => {
@@ -142,7 +157,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="mt-2 space-y-6 px-3 pb-6">
-          {NAV.map((group, gi) => (
+          {visibleNav.map((group, gi) => (
             <div key={gi}>
               {group.section && (
                 <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-celeste-300">

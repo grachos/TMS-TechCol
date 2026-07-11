@@ -33,7 +33,7 @@ authRouter.post(
     if (!user || !ok) {
       throw unauthorized('Credenciales incorrectas.');
     }
-    const token = signToken({ sub: user.id, email: user.email, nombre: user.nombre, rol: user.rol });
+    const token = signToken({ sub: user.id, email: user.email, nombre: user.nombre, rol: user.rol, paginas: user.paginas });
     res.json({ token, user: toPublic(user) });
   }),
 );
