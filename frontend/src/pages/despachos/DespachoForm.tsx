@@ -113,9 +113,16 @@ export default function DespachoForm() {
           setRemesas(data.remesas.length > 0 ? data.remesas.map(remesaDesde) : [remesaDesde()]);
           setSol(data.solicitud);
         } else {
-          const { solicitud } = await api<{ solicitud: Record<string, any> }>(`/solicitudes/${id}`);
+          const [{ solicitud }, empresa] = await Promise.all([
+            api<{ solicitud: Record<string, any> }>(`/solicitudes/${id}`),
+            api<Record<string, any>>('/empresa').catch(() => null),
+          ]);
           setSol(solicitud);
-          setEmf(solicitud.emf ?? '');
+          // Mirrors the server's own fallback (solicitud.repo.ts sembrarManifiesto):
+          // the solicitud's own EMF wins if set, otherwise the Empresa module's —
+          // shown here so the field reflects what will actually be saved, but
+          // still editable per despacho.
+          setEmf(solicitud.emf ?? empresa?.emf ?? '');
           setRemesas([remesaDesde(solicitud)]);
         }
       } catch (e) {
