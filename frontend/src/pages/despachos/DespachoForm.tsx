@@ -325,7 +325,11 @@ export default function DespachoForm() {
             <div className="flex items-center justify-between">
               <legend className="px-1 text-sm font-semibold text-celeste-700">Remesas del despacho</legend>
               {!editar && (
-                <button type="button" className="btn-ghost text-xs" onClick={() => setRemesas((rs) => [...rs, remesaDesde()])}>
+                <button
+                  type="button"
+                  className="btn-ghost text-xs"
+                  onClick={() => setRemesas((rs) => [...rs, remesaDesde(sol ?? {})])}
+                >
                   <Plus size={14} /> Agregar remesa
                 </button>
               )}
@@ -379,7 +383,10 @@ export default function DespachoForm() {
                           placeholder="Buscar producto…"
                           initialLabel={r.mercancia_codigo}
                           onClear={() => updRemesa(i, 'mercancia_codigo', '')}
-                          onSelect={(it) => updRemesa(i, 'mercancia_codigo', String(it.codigo ?? ''))}
+                          onSelect={(it) => {
+                            updRemesa(i, 'mercancia_codigo', String(it.codigo ?? ''));
+                            updRemesa(i, 'descripcion_producto', String(it.nombre ?? ''));
+                          }}
                         />
                       </div>
                       <div className="sm:col-span-2">
