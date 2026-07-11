@@ -594,11 +594,22 @@ async function payloadCumplidoManifiesto(m: Row): Promise<string> {
     NUMNITEMPRESATRANSPORTE: (await obtenerEmpresa()).nit,
     NUMMANIFIESTOCARGA: m.num_manifiesto,
     NOMTIPOCUMPLIDOMANIFIESTO: m.cumplido_tipo ?? 'C',
+    // FOPAT (0.1% del valor a pagar) es obligatorio en el cumplido — CMA271/CMA273.
+    // Reusa el valor calculado al expedir el manifiesto; se omite si no aplica (null).
+    RETENCIONFOPAT: num(m.fopat),
     FECHAENTREGADOCUMENTOS: fecha(m.fecha_entrega_documentos),
   };
   let xml = RndcClient.renderVariables(vars);
+  xml += '<VALORADICIONALHORASCARGUE>0</VALORADICIONALHORASCARGUE>';
   xml += '<VALORADICIONALFLETE>' + num(m.valor_adicional_flete ?? 0) + '</VALORADICIONALFLETE>';
   xml += '<VALORDESCUENTOFLETE>' + num(m.valor_descuento_flete ?? 0) + '</VALORDESCUENTOFLETE>';
+  // Motivo del descuento: solo se reporta si hay un descuento distinto de cero.
+  if (Number(m.valor_descuento_flete ?? 0) !== 0) {
+    xml +=
+      '<MOTIVOVALORDESCUENTOMANIFIESTO>' +
+      RndcClient.escaparXml(String(m.motivo_descuento_manifiesto ?? 'F')) +
+      '</MOTIVOVALORDESCUENTOMANIFIESTO>';
+  }
   xml += '<OBSERVACIONES>' + RndcClient.escaparXml(String(m.observaciones_cumplido ?? '')) + '</OBSERVACIONES>';
   return xml;
 }
