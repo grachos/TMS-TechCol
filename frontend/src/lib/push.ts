@@ -27,8 +27,14 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+/**
+ * Registers the service worker and waits for it to be active. `register()`
+ * alone only guarantees it's installing — pushManager.subscribe() needs an
+ * active worker or it throws "no active Service Worker".
+ */
 async function registrarServiceWorker(): Promise<ServiceWorkerRegistration> {
-  return navigator.serviceWorker.getRegistration('/sw.js').then((existing) => existing ?? navigator.serviceWorker.register('/sw.js'));
+  await navigator.serviceWorker.register('/sw.js');
+  return navigator.serviceWorker.ready;
 }
 
 /** Current subscription for this browser, if any (does not prompt). */
