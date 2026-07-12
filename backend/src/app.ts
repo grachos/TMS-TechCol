@@ -34,6 +34,20 @@ export function createApp() {
   const app = express();
   const { corsOrigins, name } = config().app;
 
+  // Canonical host: redirect www.* to the bare host. The TLS certificate covers
+  // tmslight.techcol-service.cc but NOT www.tmslight...; because PDF previews use
+  // blob: URLs that inherit the page's host, opening one while the tab was on the
+  // www host showed a "connection not secure" warning even though the cert is
+  // valid. Forcing a single origin keeps every page (and every blob) on the
+  // certificate-covered host.
+  app.use((req, res, next) => {
+    const host = req.headers.host ?? '';
+    if (host.startsWith('www.')) {
+      return res.redirect(301, `https://${host.slice(4)}${req.originalUrl}`);
+    }
+    next();
+  });
+
   app.use(cors({ origin: corsOrigins.length ? corsOrigins : true }));
   app.use(express.json({ limit: '2mb' }));
 
