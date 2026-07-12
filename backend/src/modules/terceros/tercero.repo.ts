@@ -8,6 +8,7 @@ import { RndcClient } from '../../rndc/RndcClient.js';
 import { RndcRespuesta } from '../../rndc/RndcRespuesta.js';
 import type { Tercero, TerceroListRow, Paginated } from '../../db/types.js';
 import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
+import { cached } from '../../util/cache.js';
 
 /** Whitelisted columns accepted from the form (mirrors TerceroRepo::CAMPOS). */
 const CAMPOS = [
@@ -129,10 +130,12 @@ export async function listarConPaginacion(q = '', pagina = 1, porPagina = 10): P
 
 /** Count of terceros not yet registered in the RNDC. Backs the "Terceros" nav badge. */
 export async function contarPendientes(): Promise<number> {
-  const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
-    "SELECT COUNT(*) AS n FROM tercero WHERE estado_rndc <> 'registrado'",
-  );
-  return Number(rows[0]?.n ?? 0);
+  return cached('badge:terceros', 15_000, async () => {
+    const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
+      "SELECT COUNT(*) AS n FROM tercero WHERE estado_rndc <> 'registrado'",
+    );
+    return Number(rows[0]?.n ?? 0);
+  });
 }
 
 /** Fetches a full tercero by id. Port of obtener(). */

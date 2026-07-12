@@ -25,9 +25,13 @@ import * as vehiculoRepo from '../vehiculos/vehiculo.repo.js';
 import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
 import { consecutivoRemesaRndc } from '../../util/consecutivoRndc.js';
 import { pesoAsignadoSolicitud, pesoTotalDe } from '../../util/pesoSolicitud.js';
+import { cached } from '../../util/cache.js';
 
 type Queryable = Pool | PoolConnection;
 type Row = Record<string, any>;
+
+/** TTL for the nav-badge counts: high-frequency polls collapse to one query per window. */
+const BADGE_TTL_MS = 15_000;
 
 /** Send order per document type. */
 const ORDEN: Record<string, number> = {
@@ -642,15 +646,17 @@ export async function listar(proceso = 'despacho', limite = 200): Promise<Row[]>
 
 /** Count by estado. Port of resumen(). */
 export async function resumen(proceso = 'despacho'): Promise<Record<string, number>> {
-  let where = "WHERE tipo_documento NOT IN ('tercero','vehiculo')";
-  const filtro = FILTROS[proceso];
-  if (filtro) where += ` AND tipo_documento IN (${filtro.map((t) => `'${t}'`).join(',')})`;
-  const [rows] = await db().query<RowDataPacket[]>(
-    `SELECT estado, COUNT(*) n FROM cola_envios ${where} GROUP BY estado`,
-  );
-  const out: Record<string, number> = {};
-  for (const f of rows as Row[]) out[f.estado] = Number(f.n);
-  return out;
+  return cached(`badge:cola:${proceso}`, BADGE_TTL_MS, async () => {
+    let where = "WHERE tipo_documento NOT IN ('tercero','vehiculo')";
+    const filtro = FILTROS[proceso];
+    if (filtro) where += ` AND tipo_documento IN (${filtro.map((t) => `'${t}'`).join(',')})`;
+    const [rows] = await db().query<RowDataPacket[]>(
+      `SELECT estado, COUNT(*) n FROM cola_envios ${where} GROUP BY estado`,
+    );
+    const out: Record<string, number> = {};
+    for (const f of rows as Row[]) out[f.estado] = Number(f.n);
+    return out;
+  });
 }
 
 /** Raw XML preview + RNDC response for a queue row. Backs GET /cola/:id/xml. */
@@ -871,18 +877,22 @@ export async function actualizarDespacho(manifiestoId: number, datos: Row): Prom
 
 /** Count of remesas not yet accepted by the RNDC. Backs the "Despachos" nav badge. */
 export async function contarDespachosPendientes(): Promise<number> {
-  const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
-    "SELECT COUNT(*) AS n FROM remesa WHERE estado_rndc <> 'aceptado'",
-  );
-  return Number(rows[0]?.n ?? 0);
+  return cached('badge:despachos', BADGE_TTL_MS, async () => {
+    const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
+      "SELECT COUNT(*) AS n FROM remesa WHERE estado_rndc <> 'aceptado'",
+    );
+    return Number(rows[0]?.n ?? 0);
+  });
 }
 
 /** Count of manifiestos pending cumplido. Backs the "Cumplido" nav badge. */
 export async function contarPendientesCumplido(): Promise<number> {
-  const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
-    "SELECT COUNT(*) AS n FROM manifiesto WHERE cumplido_estado_rndc = 'pendiente'",
-  );
-  return Number(rows[0]?.n ?? 0);
+  return cached('badge:cumplido', BADGE_TTL_MS, async () => {
+    const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
+      "SELECT COUNT(*) AS n FROM manifiesto WHERE cumplido_estado_rndc = 'pendiente'",
+    );
+    return Number(rows[0]?.n ?? 0);
+  });
 }
 
 /** Dispatches whose manifiesto was accepted but cumplido is pending. Port of listarPendientesCumplido(). */

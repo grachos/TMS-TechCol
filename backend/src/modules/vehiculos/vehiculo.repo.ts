@@ -10,6 +10,7 @@ import { RndcClient } from '../../rndc/RndcClient.js';
 import { RndcRespuesta } from '../../rndc/RndcRespuesta.js';
 import type { Vehiculo, VehiculoListRow, Paginated } from '../../db/types.js';
 import { obtener as obtenerEmpresa } from '../empresa/empresa.repo.js';
+import { cached } from '../../util/cache.js';
 
 const CAMPOS = [
   'placa', 'cod_configuracion', 'marca', 'peso_vacio', 'remolque_placa',
@@ -97,10 +98,12 @@ export async function listarConPaginacion(q = '', pagina = 1, porPagina = 10): P
 
 /** Count of vehículos not yet registered in the RNDC. Backs the "Vehículos" nav badge. */
 export async function contarPendientes(): Promise<number> {
-  const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
-    "SELECT COUNT(*) AS n FROM vehiculo WHERE estado_rndc <> 'registrado'",
-  );
-  return Number(rows[0]?.n ?? 0);
+  return cached('badge:vehiculos', 15_000, async () => {
+    const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
+      "SELECT COUNT(*) AS n FROM vehiculo WHERE estado_rndc <> 'registrado'",
+    );
+    return Number(rows[0]?.n ?? 0);
+  });
 }
 
 export interface VehiculoDetalle {
