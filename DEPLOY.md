@@ -55,12 +55,23 @@ manifiestos, RNDC…) se preservan. Si es una instalación nueva:
    migracion_v31_staff_users.sql   ← NUEVO (login del personal)
    migracion_v32_pdf_oficial.sql   ← NUEVO (plantilla PDF oficial)
    migracion_v33_rndc_credenciales.sql   ← NUEVO (usuario/contraseña RNDC en maestro_empresa)
+   migracion_v34_drop_peso_vacio_remolque.sql
+   migracion_v35_manifiesto_observaciones.sql
+   migracion_v36_manifiesto_seguridadqr_error.sql
+   migracion_v37_cola_tipo_documento_cumplido.sql
+   migracion_v38_staff_users_paginas.sql   ← permisos por página del operador
+   migracion_v39_cumplido_cargue_entrada_salida.sql   ← fechas/horas entrada+salida cargue del cumplido
+   migracion_v40_push_subscriptions.sql   ← NUEVO (notificaciones push por usuario)
+   migracion_v41_indices_estado.sql   ← NUEVO (índices para los contadores de los badges)
    ```
 
    Todas las migraciones usan `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF
-   NOT EXISTS`, así que son **idempotentes**: si tu base ya tenía aplicadas
-   varias de la app PHP, no pasa nada por re-importarlas. Como mínimo,
-   **v31 y v32 son obligatorias y nuevas** (no existían en la app PHP).
+   NOT EXISTS` / `ADD INDEX IF NOT EXISTS`, así que son **idempotentes**: si tu
+   base ya tenía aplicadas varias de la app PHP, no pasa nada por
+   re-importarlas. Importa **siempre la lista completa hasta la más reciente**
+   cada vez que despliegues cambios que traigan migraciones nuevas (las últimas
+   son **v40** —push— y **v41** —índices—). Como mínimo, **v31 y v32 son
+   obligatorias y nuevas** respecto a la app PHP.
 4. Solo en instalación nueva: los catálogos CSV (`municipios_dane.csv`,
    `catalogo_productos.csv`, etc.) se importan una vez con phpMyAdmin
    (pestaña Importar, formato CSV, elige la tabla destino) o con
@@ -139,10 +150,25 @@ RNDC_TIMEOUT=30
 COLA_MAX_INTENTOS=10
 COLA_MINUTOS_REINTENTO=15
 COLA_ENVIO_HABILITADO=false     # true SOLO cuando quieras enviar de verdad al RNDC
+
+# --- Notificaciones push (Web Push, VAPID propio, sin servicio de terceros) ---
+# Genera el par de llaves UNA vez con: npx --prefix backend web-push generate-vapid-keys
+# Si las dejas vacías, el push queda deshabilitado (no rompe nada más).
+VAPID_PUBLIC_KEY=<llave-publica>
+VAPID_PRIVATE_KEY=<llave-privada>
+VAPID_SUBJECT=mailto:tu-correo@dominio.com
+PUSH_WATCH_MS=60000             # cada cuánto revisa los contadores para notificar
 ```
 
 No definas `PORT` — Hostinger asigna uno y lo inyecta él solo; el backend ya
 lo lee de `process.env.PORT` vía `config()`.
+
+> **Push requiere HTTPS válido.** Los service workers y la Push API solo
+> funcionan en un "secure context": el certificado SSL del dominio debe estar
+> activo y la app servirse por `https://`. Si el navegador marca el sitio como
+> "no seguro", el push falla en silencio. Además, abre siempre la app por el
+> **host que cubre el certificado** (sin `www.` si tu certificado es para el
+> dominio pelado) — el backend ya redirige `www.*` al host base por esto.
 
 > **Usuario/contraseña RNDC y NIT ya no van aquí.** Se editan desde el
 > formulario **Empresa** (solo admin) una vez que la app está corriendo —
@@ -252,6 +278,57 @@ Verificación: al entrar a la app aparece un botón de chat abajo a la derecha;
 - [ ] El cron del worker corre cada 15 min (revisa el log).
 - [ ] PDFs: si no hay Chrome instalado, confirma que cae al HTML imprimible
       sin romper la descarga (comportamiento esperado, no error).
+- [ ] Push (opcional): con SSL válido y `VAPID_*` puestas, el botón de campana
+      en la cabecera pide permiso y suscribe el dispositivo; `GET /api/push/public-key`
+      responde `{"habilitado":true,...}`.
+
+---
+
+## 8. Dependencias de desarrollo y alertas del escáner
+
+El escáner de Hostinger (que refleja el análisis de dependencias de **GitHub**)
+va a marcar de vez en cuando paquetes como `vitest`, `vite` o `esbuild`. Antes
+de correr a "parchear", ten claro esto:
+
+**Esos paquetes son herramientas de desarrollo/compilación, no de ejecución.**
+Están en `devDependencies`. La app que corre en el servidor es el `backend/dist/`
+ya compilado + las `dependencies` de runtime (express, mysql2, web-push, etc.).
+`vitest`/`vite`/`esbuild` **nunca se ejecutan en producción**, así que su
+superficie de ataque real en tu servidor es nula aunque figuren en el árbol.
+
+**Por qué no siempre se pueden "subir de versión":** el build necesita esas
+dev-deps (`tsc`, `vite`, `tsx`), así que no puedes saltártelas al compilar. Y
+forzar una versión más nueva de una dep transitiva puede romper el build — p.ej.
+forzar `esbuild@0.28` bajo `vite@6` rompe `vite build` (Vite 6 está atado al
+rango `0.25.x`). En esos casos, subir la versión cuesta más de lo que vale para
+una herramienta que ni corre en producción.
+
+**Qué hacer, en orden de preferencia:**
+
+1. **No dejar las dev-deps instaladas en el servidor que corre.** Idealmente,
+   tras compilar, deja solo las deps de runtime. Si tu panel te permite un paso
+   después del build (o tienes SSH), corre:
+   ```bash
+   npm prune --omit=dev
+   ```
+   Esto borra `vitest`/`vite`/`esbuild`/`typescript`/`tsx` del `node_modules`
+   del servidor. Ojo: **no** uses `npm ci --omit=dev` como reemplazo del install
+   del pipeline, porque entonces el `npm run build` fallaría (faltarían `tsc` y
+   `vite`). El orden correcto es: install completo → build → `prune --omit=dev`.
+
+2. **El escáner de GitHub lee el `package-lock.json` del repo, no tu servidor.**
+   Por eso `--omit=dev` reduce el riesgo real (lo que corre) pero **puede seguir
+   mostrando la alerta**, porque el lockfile sigue listando la dev-dep. Para
+   silenciar esas alertas concretas: márcalas como *descartadas / falso positivo*
+   en el panel, o configura Dependabot para ignorar `devDependencies`.
+
+3. **Verifica siempre el "Withdrawn Advisory".** Si la propia alerta dice
+   *"This advisory has been withdrawn…"*, GitHub la retiró: `npm audit` no la
+   cuenta y no hay nada que parchear (le pasó al aviso de `esbuild`
+   GHSA-gv7w-rqvm-qjhr, que además era solo del runtime **Deno**, no Node).
+
+Regla práctica: corre `npm audit` (dentro de `backend/`) — si dice
+`found 0 vulnerabilities`, estás bien aunque el panel muestre ruido de dev-deps.
 
 ## Resumen del flujo diario
 
@@ -269,3 +346,8 @@ automáticos** en cada push a `main` — a diferencia del hPanel clásico
 (Git + Node.js App por separado), donde sí haría falta un paso manual de
 `npm run build` + reinicio. Si tu deploy no se dispara solo, revisa que el
 webhook/auto-deploy esté activado en la pantalla de la app.
+
+> Si el push trae **migraciones nuevas** (ver §1) o cambia **variables de
+> entorno** (ver §3), el auto-deploy **no** las aplica: impórtalas/edítalas a
+> mano. Y para no arrastrar herramientas de desarrollo al servidor, considera
+> el `npm prune --omit=dev` de la **§8**.
