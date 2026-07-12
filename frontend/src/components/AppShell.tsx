@@ -22,11 +22,14 @@ import {
   LogOut,
   Menu,
   X,
+  Bell,
+  BellOff,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore, type Pagina } from '../store/auth';
 import { api } from '../lib/api';
 import { ChatWidget } from './ChatWidget';
+import { soportePush, suscripcionActual, activarPush, desactivarPush } from '../lib/push';
 
 /** How often to re-poll the nav badge counts (ms). */
 const BADGE_POLL_MS = 20_000;
@@ -86,6 +89,57 @@ const NAV: { section?: string; items: NavItem[] }[] = [
     ],
   },
 ];
+
+/** Header bell: subscribe/unsubscribe this browser from push notifications. */
+function NotificationToggle() {
+  const [suscrito, setSuscrito] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const soportado = soportePush() === 'ready';
+
+  useEffect(() => {
+    if (!soportado) return;
+    void suscripcionActual().then((s) => setSuscrito(s != null));
+  }, [soportado]);
+
+  if (!soportado) return null;
+
+  async function toggle() {
+    setBusy(true);
+    setError(null);
+    try {
+      if (suscrito) {
+        await desactivarPush();
+        setSuscrito(false);
+      } else {
+        await activarPush();
+        setSuscrito(true);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo actualizar la suscripción.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        className="btn-ghost"
+        onClick={toggle}
+        disabled={busy || suscrito === null}
+        title={suscrito ? 'Desactivar notificaciones' : 'Activar notificaciones'}
+      >
+        {suscrito ? <Bell size={18} /> : <BellOff size={18} />}
+      </button>
+      {error && (
+        <p className="absolute right-0 top-full z-10 mt-1 w-56 rounded-md bg-red-50 p-2 text-xs text-red-700 shadow">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -212,6 +266,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="text-sm font-medium text-slate-700">{user?.nombre}</p>
               <p className="text-xs uppercase tracking-wide text-celeste-600">{user?.rol}</p>
             </div>
+            <NotificationToggle />
             <button className="btn-ghost" onClick={doLogout}>
               <LogOut size={16} /> Salir
             </button>

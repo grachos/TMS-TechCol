@@ -56,6 +56,8 @@ export interface AppConfig {
     timeout: number;
   };
   cola: { maxIntentos: number; minutosReintento: number; envioHabilitado: boolean };
+  /** Web Push (own VAPID keypair, no third-party notification service). */
+  push: { vapidPublicKey: string; vapidPrivateKey: string; vapidSubject: string; watchMs: number; habilitado: boolean };
   /** Data chatbot via OpenRouter (OpenAI-compatible API). */
   chat: {
     habilitado: boolean;
@@ -112,6 +114,18 @@ export function config(): AppConfig {
       // Safety switch: false builds/previews XML but does NOT send to the RNDC.
       envioHabilitado: bool('COLA_ENVIO_HABILITADO', false),
     },
+    push: (() => {
+      const vapidPublicKey = str('VAPID_PUBLIC_KEY');
+      const vapidPrivateKey = str('VAPID_PRIVATE_KEY');
+      return {
+        vapidPublicKey,
+        vapidPrivateKey,
+        vapidSubject: str('VAPID_SUBJECT', 'mailto:admin@example.com'),
+        watchMs: int('PUSH_WATCH_MS', 60_000),
+        // Opt-in: only active once both VAPID keys are set.
+        habilitado: Boolean(vapidPublicKey && vapidPrivateKey),
+      };
+    })(),
     chat: {
       // Opt-in: the chatbot only works once an OpenRouter key is set and enabled.
       habilitado: bool('CHAT_HABILITADO', false),
