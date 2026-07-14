@@ -29,6 +29,11 @@ const ETIQUETAS: Record<string, string> = {
   manifiesto: 'Manifiesto',
   cumplido_remesa: 'Cumplido remesa',
   cumplido_manifiesto: 'Cumplido manifiesto',
+  anular_cumplido_manifiesto: 'Anular cumplido manifiesto',
+  anular_cumplido_remesa: 'Anular cumplido remesa',
+  anular_cumplido_inicial_remesa: 'Anular cumplido inicial remesa',
+  anular_manifiesto: 'Anular manifiesto',
+  anular_remesa: 'Anular remesa',
 };
 const CATEGORIA: Record<string, string> = {
   tercero: 'Maestro',
@@ -37,11 +42,17 @@ const CATEGORIA: Record<string, string> = {
   manifiesto: 'Despacho',
   cumplido_remesa: 'Cumplido',
   cumplido_manifiesto: 'Cumplido',
+  anular_cumplido_manifiesto: 'Anulación',
+  anular_cumplido_remesa: 'Anulación',
+  anular_cumplido_inicial_remesa: 'Anulación',
+  anular_manifiesto: 'Anulación',
+  anular_remesa: 'Anulación',
 };
 const CAT_STYLE: Record<string, string> = {
   Maestro: 'bg-blue-100 text-blue-700',
   Despacho: 'bg-emerald-100 text-emerald-700',
   Cumplido: 'bg-orange-100 text-orange-700',
+  Anulación: 'bg-red-100 text-red-700',
 };
 const RESUMEN = ['pendiente', 'enviando', 'enviado', 'error'] as const;
 
@@ -130,6 +141,7 @@ export default function ColaMonitor() {
           <option value="todos">Despacho + Cumplido</option>
           <option value="despacho">Despacho</option>
           <option value="cumplido">Cumplido</option>
+          <option value="anulacion">Anulación</option>
         </select>
         <div className="flex flex-wrap gap-2">
           {RESUMEN.map((est) => (

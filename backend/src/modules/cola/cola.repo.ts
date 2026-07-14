@@ -241,12 +241,89 @@ function motivoBase(reason: MotivoAnulacion): string {
   return reason === 'digitacion' ? 'D' : 'S';
 }
 
+/** Etiquetas legibles de cada paso, para el preview y para Cola. */
+export const ETIQUETA_ANULACION: Record<string, string> = {
+  anular_cumplido_manifiesto: 'Anular cumplido de manifiesto',
+  anular_cumplido_remesa: 'Anular cumplido de remesa',
+  anular_cumplido_inicial_remesa: 'Anular cumplido inicial de remesa',
+  anular_manifiesto: 'Anular manifiesto',
+  anular_remesa: 'Anular remesa',
+};
+
+interface PasoAnulacion {
+  tipo: 'anular_cumplido_manifiesto' | 'anular_cumplido_remesa' | 'anular_manifiesto' | 'anular_remesa';
+  /** id de la fila origen: manifiestoId para los dos primeros/anular_manifiesto, remesaId para anular_remesa. */
+  referenciaId: number;
+  /** consecutivo mostrado al usuario (num_manifiesto o el consecutivo RNDC de la remesa). */
+  consecutivo: string;
+}
+
 /**
- * Encola la anulación de un despacho radicado, en el orden inverso a la creación
+ * Calcula qué pasos de anulación aplican, en el orden inverso a la creación
  * (LIFO): anular cumplido manifiesto (29) → anular cumplido remesa (28) →
- * anular manifiesto (32) → anular remesa (9). Solo encola los pasos que aplican
- * según el estado real de cada documento. El paso 54 (cumplido inicial) NO se
- * encola aquí: se inyecta reactivamente si el RNDC lo exige (ver aplicarResultado).
+ * anular manifiesto (32) → anular remesa (9). Es la ÚNICA fuente de verdad de
+ * "qué se va a anular" — la usan tanto el preview (solo lectura) como
+ * encolarAnulacion() (ejecuta), para que nunca diverjan.
+ */
+function calcularPasosAnulacion(manif: Row, remesas: Row[]): PasoAnulacion[] {
+  const pasos: PasoAnulacion[] = [];
+  if (manif.cumplido_estado_rndc === 'aceptado') {
+    pasos.push({ tipo: 'anular_cumplido_manifiesto', referenciaId: Number(manif.id), consecutivo: manif.num_manifiesto });
+  }
+  for (const rem of remesas) {
+    if (rem.cumplido_estado_rndc === 'aceptado') {
+      pasos.push({ tipo: 'anular_cumplido_remesa', referenciaId: Number(rem.id), consecutivo: consecutivoRemesaRndc(rem.num_remesa) });
+    }
+  }
+  pasos.push({ tipo: 'anular_manifiesto', referenciaId: Number(manif.id), consecutivo: manif.num_manifiesto });
+  for (const rem of remesas) {
+    if (rem.estado_rndc === 'aceptado') {
+      pasos.push({ tipo: 'anular_remesa', referenciaId: Number(rem.id), consecutivo: consecutivoRemesaRndc(rem.num_remesa) });
+    }
+  }
+  return pasos;
+}
+
+async function manifiestoYRemesas(conn: Queryable, manifiestoId: number): Promise<{ manif: Row; remesas: Row[] } | null> {
+  const manif = await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
+  if (manif === null) return null;
+  const [remesaRows] = await conn.query<RowDataPacket[]>(
+    `SELECT r.* FROM remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+     WHERE mr.manifiesto_id = ? ORDER BY r.id`,
+    [manifiestoId],
+  );
+  return { manif, remesas: remesaRows as Row[] };
+}
+
+export interface PreviewAnulacion {
+  puedeAnular: boolean;
+  motivoBloqueo: string | null;
+  pasos: { tipo: string; label: string; consecutivo: string }[];
+}
+
+/** Preview de solo lectura: qué pasos se ejecutarían si se confirma la anulación. */
+export async function previsualizarAnulacion(manifiestoId: number): Promise<PreviewAnulacion> {
+  const datos = await manifiestoYRemesas(db(), manifiestoId);
+  if (datos === null) return { puedeAnular: false, motivoBloqueo: 'Manifiesto no encontrado.', pasos: [] };
+  if (datos.manif.estado_rndc !== 'aceptado') {
+    return {
+      puedeAnular: false,
+      motivoBloqueo: 'Solo se puede anular un manifiesto radicado (aceptado) en el RNDC.',
+      pasos: [],
+    };
+  }
+  const pasos = calcularPasosAnulacion(datos.manif, datos.remesas);
+  return {
+    puedeAnular: true,
+    motivoBloqueo: null,
+    pasos: pasos.map((p) => ({ tipo: p.tipo, label: ETIQUETA_ANULACION[p.tipo]!, consecutivo: p.consecutivo })),
+  };
+}
+
+/**
+ * Encola la anulación de un despacho radicado según calcularPasosAnulacion().
+ * El paso 54 (cumplido inicial) NO se encola aquí: se inyecta reactivamente si
+ * el RNDC lo exige (ver la remediación en aplicarResultado()).
  *
  * Precondición dura: el manifiesto debe estar radicado ('aceptado'). Si sus
  * remesas siguen cumplidas, primero se anulan los cumplidos (pasos 29/28), lo
@@ -259,8 +336,9 @@ export async function encolarAnulacion(
   observaciones: string,
   anuladoPor: number | null,
 ): Promise<void> {
-  const manif = await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
-  if (manif === null) throw new Error('Manifiesto no encontrado.');
+  const datos = await manifiestoYRemesas(conn, manifiestoId);
+  if (datos === null) throw new Error('Manifiesto no encontrado.');
+  const { manif, remesas } = datos;
   if (manif.estado_rndc !== 'aceptado') {
     throw new Error('Solo se puede anular un manifiesto radicado (aceptado) en el RNDC.');
   }
@@ -269,39 +347,26 @@ export async function encolarAnulacion(
   const obs = observaciones ?? '';
   const mBase = motivoBase(reason);
   const mCump = motivoCumplido(reason);
+  const remesaPorId = new Map(remesas.map((r) => [Number(r.id), r] as const));
 
-  const [remesaRows] = await conn.query<RowDataPacket[]>(
-    `SELECT r.* FROM remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
-     WHERE mr.manifiesto_id = ? ORDER BY r.id`,
-    [manifiestoId],
-  );
-  const remesas = remesaRows as Row[];
-
-  // 1) Anular cumplido manifiesto (29), solo si el manifiesto está cumplido.
-  if (manif.cumplido_estado_rndc === 'aceptado') {
-    await reemplazarColaPendiente(conn, manifiestoId, 'anular_cumplido_manifiesto', manifiestoId);
-    await insertarCola(conn, solicitudId, manifiestoId, 'anular_cumplido_manifiesto', manifiestoId,
-      payloadAnularCumplidoManifiesto(nit, manif.num_manifiesto, mCump, obs));
-  }
-  // 2) Anular cumplido remesa (28) por cada remesa cumplida.
-  for (const rem of remesas) {
-    if (rem.cumplido_estado_rndc === 'aceptado') {
-      await reemplazarColaPendiente(conn, manifiestoId, 'anular_cumplido_remesa', Number(rem.id));
-      await insertarCola(conn, solicitudId, manifiestoId, 'anular_cumplido_remesa', Number(rem.id),
-        payloadAnularCumplidoRemesa(nit, rem.num_remesa, mCump, obs));
+  for (const paso of calcularPasosAnulacion(manif, remesas)) {
+    await reemplazarColaPendiente(conn, manifiestoId, paso.tipo, paso.referenciaId);
+    let payload: string;
+    switch (paso.tipo) {
+      case 'anular_cumplido_manifiesto':
+        payload = payloadAnularCumplidoManifiesto(nit, manif.num_manifiesto, mCump, obs);
+        break;
+      case 'anular_cumplido_remesa':
+        payload = payloadAnularCumplidoRemesa(nit, remesaPorId.get(paso.referenciaId)!.num_remesa, mCump, obs);
+        break;
+      case 'anular_manifiesto':
+        payload = payloadAnularManifiesto(nit, manif.num_manifiesto, mBase, obs);
+        break;
+      case 'anular_remesa':
+        payload = payloadAnularRemesa(nit, remesaPorId.get(paso.referenciaId)!.num_remesa, mBase, obs);
+        break;
     }
-  }
-  // 3) Anular manifiesto (32).
-  await reemplazarColaPendiente(conn, manifiestoId, 'anular_manifiesto', manifiestoId);
-  await insertarCola(conn, solicitudId, manifiestoId, 'anular_manifiesto', manifiestoId,
-    payloadAnularManifiesto(nit, manif.num_manifiesto, mBase, obs));
-  // 4) Anular remesa (9) por cada remesa radicada.
-  for (const rem of remesas) {
-    if (rem.estado_rndc === 'aceptado') {
-      await reemplazarColaPendiente(conn, manifiestoId, 'anular_remesa', Number(rem.id));
-      await insertarCola(conn, solicitudId, manifiestoId, 'anular_remesa', Number(rem.id),
-        payloadAnularRemesa(nit, rem.num_remesa, mBase, obs));
-    }
+    await insertarCola(conn, solicitudId, manifiestoId, paso.tipo, paso.referenciaId, payload);
   }
 
   // Marca los documentos como "anulación en curso" + auditoría. El estado final
