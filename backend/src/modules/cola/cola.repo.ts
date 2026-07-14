@@ -33,7 +33,16 @@ type Row = Record<string, any>;
 /** TTL for the nav-badge counts: high-frequency polls collapse to one query per window. */
 const BADGE_TTL_MS = 15_000;
 
-/** Send order per document type. */
+/**
+ * Send order per document type. Anulación is the reverse of creation (LIFO):
+ * you can only "pop" the top of the stack, so the anular_* orders run after the
+ * forward flow and in reverse (cumplido manifiesto → cumplido remesa →
+ * manifiesto → remesa). The `dependenciaPendiente()` check enforces this.
+ *
+ * anular_cumplido_inicial_remesa (proc 54) has no fixed slot: it is injected
+ * reactively at runtime with an orden just below the step that the RNDC says
+ * needs it — see the remediation logic in Phase 2.
+ */
 const ORDEN: Record<string, number> = {
   tercero: 10,
   vehiculo: 20,
@@ -41,6 +50,11 @@ const ORDEN: Record<string, number> = {
   manifiesto: 40,
   cumplido_remesa: 50,
   cumplido_manifiesto: 60,
+  anular_cumplido_manifiesto: 70,
+  anular_cumplido_remesa: 80,
+  anular_cumplido_inicial_remesa: 85, // nominal; real orden set on reactive injection
+  anular_manifiesto: 90,
+  anular_remesa: 100,
 };
 /** RNDC proceso per document type. */
 const PROCESO: Record<string, number> = {
@@ -50,6 +64,11 @@ const PROCESO: Record<string, number> = {
   manifiesto: 4,
   cumplido_remesa: 5,
   cumplido_manifiesto: 6,
+  anular_cumplido_manifiesto: 29,
+  anular_cumplido_remesa: 28,
+  anular_cumplido_inicial_remesa: 54,
+  anular_manifiesto: 32,
+  anular_remesa: 9,
 };
 
 async function fila(exec: Queryable, sql: string, params: unknown[]): Promise<Row | null> {
@@ -620,6 +639,84 @@ async function payloadCumplidoManifiesto(m: Row): Promise<string> {
   }
   xml += '<OBSERVACIONES>' + RndcClient.escaparXml(String(m.observaciones_cumplido ?? '')) + '</OBSERVACIONES>';
   return xml;
+}
+
+// ---------- Anulación payloads (RNDC procesos 9 / 28 / 29 / 32 / 54) ----------
+//
+// Pure builders (NIT + motivo + observaciones as params) so they can be
+// characterization-tested for exact XML without a DB. Motivo codes differ per
+// proceso: cumplidos (28/29/54) usan D/O; manifiesto (32) D/S/R; remesa (9) D/S.
+// OBSERVACIONES es opcional en el RNDC pero siempre se emite (aunque vacía) para
+// calzar con los XML de referencia del Ministerio.
+
+/** Always-present <OBSERVACIONES> tag (matches the RNDC reference XMLs). */
+function tagObservaciones(obs: string): string {
+  return '<OBSERVACIONES>' + RndcClient.escaparXml(obs ?? '') + '</OBSERVACIONES>';
+}
+
+/** procesoid 29 — Anular Cumplido de Manifiesto. */
+export function payloadAnularCumplidoManifiesto(nit: string, numManifiesto: string, motivo: string, obs = ''): string {
+  const vars: RndcVars = {
+    NUMNITEMPRESATRANSPORTE: nit,
+    NUMMANIFIESTOCARGA: numManifiesto,
+    CODMOTIVOANULACIONCUMPLIDO: motivo, // D / O
+  };
+  return RndcClient.renderVariables(vars) + tagObservaciones(obs);
+}
+
+/** procesoid 28 — Anular Cumplido de Remesa. */
+export function payloadAnularCumplidoRemesa(nit: string, numRemesa: unknown, motivo: string, obs = ''): string {
+  const vars: RndcVars = {
+    NUMNITEMPRESATRANSPORTE: nit,
+    CONSECUTIVOREMESA: consecutivoRemesaRndc(numRemesa),
+    CODMOTIVOANULACIONCUMPLIDO: motivo, // D / O
+  };
+  return RndcClient.renderVariables(vars) + tagObservaciones(obs);
+}
+
+/**
+ * procesoid 54 — Anular Cumplido Inicial de Remesa. Se envía sólo de forma
+ * reactiva: cuando el RNDC rechaza un anular_cumplido_remesa / anular_remesa
+ * exigiendo que primero se anule el cumplido inicial (ver remediación, Fase 2).
+ */
+export function payloadAnularCumplidoInicialRemesa(
+  nit: string,
+  numRemesa: unknown,
+  numManifiesto: string,
+  motivo: string,
+  obs = '',
+): string {
+  const vars: RndcVars = {
+    NUMNITEMPRESATRANSPORTE: nit,
+    CONSECUTIVOREMESA: consecutivoRemesaRndc(numRemesa),
+    NUMMANIFIESTOCARGA: numManifiesto,
+    CODMOTIVOANULACIONCUMPLIDO: motivo, // D / O
+  };
+  return RndcClient.renderVariables(vars) + tagObservaciones(obs);
+}
+
+/** procesoid 32 — Anular Manifiesto de Carga. */
+export function payloadAnularManifiesto(nit: string, numManifiesto: string, motivo: string, obs = ''): string {
+  const vars: RndcVars = {
+    NUMNITEMPRESATRANSPORTE: nit,
+    NUMMANIFIESTOCARGA: numManifiesto,
+    MOTIVOANULACIONMANIFIESTO: motivo, // D / S / R
+  };
+  return RndcClient.renderVariables(vars) + tagObservaciones(obs);
+}
+
+/**
+ * procesoid 9 — Anular Remesa Terrestre de Carga. MOTIVOREVERSAREMESA='A'
+ * (anular; 'L' sería liberar para transbordo, que no usamos aquí).
+ */
+export function payloadAnularRemesa(nit: string, numRemesa: unknown, motivo: string, obs = ''): string {
+  const vars: RndcVars = {
+    NUMNITEMPRESATRANSPORTE: nit,
+    CONSECUTIVOREMESA: consecutivoRemesaRndc(numRemesa),
+    MOTIVOREVERSAREMESA: 'A',
+    MOTIVOANULACIONREMESA: motivo, // D / S
+  };
+  return RndcClient.renderVariables(vars) + tagObservaciones(obs);
 }
 
 // ---------- Reads for the monitor ----------
