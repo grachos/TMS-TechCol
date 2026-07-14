@@ -116,12 +116,13 @@ async function insertarCola(
   tipo: string,
   referenciaId: number,
   payloadXml: string,
+  orden: number = ORDEN[tipo]!,
 ): Promise<void> {
   await exec.query(
     `INSERT INTO cola_envios
         (solicitud_id, manifiesto_id, tipo_documento, referencia_id, proceso_rndc, orden, payload_xml, estado, max_intentos)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
-    [solicitudId, manifiestoId, tipo, referenciaId, PROCESO[tipo], ORDEN[tipo], payloadXml, config().cola.maxIntentos],
+    [solicitudId, manifiestoId, tipo, referenciaId, PROCESO[tipo], orden, payloadXml, config().cola.maxIntentos],
   );
 }
 
@@ -228,6 +229,97 @@ export async function encolarCumplido(
   }
 }
 
+/** Motivo que elige el usuario; se traduce al código RNDC según el proceso. */
+export type MotivoAnulacion = 'digitacion' | 'cancelacion';
+
+/** Código de motivo para los cumplidos (procs 28/29/54): D o O. */
+function motivoCumplido(reason: MotivoAnulacion): string {
+  return reason === 'digitacion' ? 'D' : 'O';
+}
+/** Código de motivo para el documento base (procs 32 manifiesto / 9 remesa): D o S. */
+function motivoBase(reason: MotivoAnulacion): string {
+  return reason === 'digitacion' ? 'D' : 'S';
+}
+
+/**
+ * Encola la anulación de un despacho radicado, en el orden inverso a la creación
+ * (LIFO): anular cumplido manifiesto (29) → anular cumplido remesa (28) →
+ * anular manifiesto (32) → anular remesa (9). Solo encola los pasos que aplican
+ * según el estado real de cada documento. El paso 54 (cumplido inicial) NO se
+ * encola aquí: se inyecta reactivamente si el RNDC lo exige (ver aplicarResultado).
+ *
+ * Precondición dura: el manifiesto debe estar radicado ('aceptado'). Si sus
+ * remesas siguen cumplidas, primero se anulan los cumplidos (pasos 29/28), lo
+ * cual las deja re-cumplibles; luego se anulan manifiesto y remesas.
+ */
+export async function encolarAnulacion(
+  conn: Queryable,
+  manifiestoId: number,
+  reason: MotivoAnulacion,
+  observaciones: string,
+  anuladoPor: number | null,
+): Promise<void> {
+  const manif = await fila(conn, 'SELECT * FROM manifiesto WHERE id = ?', [manifiestoId]);
+  if (manif === null) throw new Error('Manifiesto no encontrado.');
+  if (manif.estado_rndc !== 'aceptado') {
+    throw new Error('Solo se puede anular un manifiesto radicado (aceptado) en el RNDC.');
+  }
+  const solicitudId = Number(manif.solicitud_id);
+  const nit = (await obtenerEmpresa()).nit;
+  const obs = observaciones ?? '';
+  const mBase = motivoBase(reason);
+  const mCump = motivoCumplido(reason);
+
+  const [remesaRows] = await conn.query<RowDataPacket[]>(
+    `SELECT r.* FROM remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+     WHERE mr.manifiesto_id = ? ORDER BY r.id`,
+    [manifiestoId],
+  );
+  const remesas = remesaRows as Row[];
+
+  // 1) Anular cumplido manifiesto (29), solo si el manifiesto está cumplido.
+  if (manif.cumplido_estado_rndc === 'aceptado') {
+    await reemplazarColaPendiente(conn, manifiestoId, 'anular_cumplido_manifiesto', manifiestoId);
+    await insertarCola(conn, solicitudId, manifiestoId, 'anular_cumplido_manifiesto', manifiestoId,
+      payloadAnularCumplidoManifiesto(nit, manif.num_manifiesto, mCump, obs));
+  }
+  // 2) Anular cumplido remesa (28) por cada remesa cumplida.
+  for (const rem of remesas) {
+    if (rem.cumplido_estado_rndc === 'aceptado') {
+      await reemplazarColaPendiente(conn, manifiestoId, 'anular_cumplido_remesa', Number(rem.id));
+      await insertarCola(conn, solicitudId, manifiestoId, 'anular_cumplido_remesa', Number(rem.id),
+        payloadAnularCumplidoRemesa(nit, rem.num_remesa, mCump, obs));
+    }
+  }
+  // 3) Anular manifiesto (32).
+  await reemplazarColaPendiente(conn, manifiestoId, 'anular_manifiesto', manifiestoId);
+  await insertarCola(conn, solicitudId, manifiestoId, 'anular_manifiesto', manifiestoId,
+    payloadAnularManifiesto(nit, manif.num_manifiesto, mBase, obs));
+  // 4) Anular remesa (9) por cada remesa radicada.
+  for (const rem of remesas) {
+    if (rem.estado_rndc === 'aceptado') {
+      await reemplazarColaPendiente(conn, manifiestoId, 'anular_remesa', Number(rem.id));
+      await insertarCola(conn, solicitudId, manifiestoId, 'anular_remesa', Number(rem.id),
+        payloadAnularRemesa(nit, rem.num_remesa, mBase, obs));
+    }
+  }
+
+  // Marca los documentos como "anulación en curso" + auditoría. El estado final
+  // 'anulado' lo pone marcarOrigen() cuando el RNDC confirma cada paso.
+  await conn.query(
+    `UPDATE manifiesto SET estado_rndc = 'anulacion_pendiente', anulacion_motivo = ?,
+       anulacion_observaciones = ?, anulado_por = ? WHERE id = ?`,
+    [mBase, obs, anuladoPor, manifiestoId],
+  );
+  await conn.query(
+    `UPDATE remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+       SET r.estado_rndc = 'anulacion_pendiente', r.anulacion_motivo = ?,
+           r.anulacion_observaciones = ?, r.anulado_por = ?
+     WHERE mr.manifiesto_id = ? AND r.estado_rndc = 'aceptado'`,
+    [mBase, obs, anuladoPor, manifiestoId],
+  );
+}
+
 /** Is there a lower-`orden` row of the same solicitud not yet 'enviado'? Port of dependenciaPendiente(). */
 async function dependenciaPendiente(solicitudId: number, orden: number): Promise<boolean> {
   const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
@@ -271,6 +363,36 @@ async function marcarOrigen(row: Row, resp: RndcRespuesta): Promise<void> {
   if (tipo === 'cumplido_manifiesto') {
     await db().query(
       "UPDATE manifiesto SET cumplido_estado_rndc = 'aceptado', cumplido_rndc_ingreso_id = ? WHERE id = ?",
+      [resp.ingresoId, Number(row.referencia_id)],
+    );
+  }
+  // --- Anulación: propaga cada confirmación del RNDC al documento origen ---
+  // Anular cumplido (28/29) deja el cumplido re-cumplible: vuelve a 'pendiente'
+  // y limpia el ingreso, para que reaparezca "Cumplir" y se pueda reenviar.
+  if (tipo === 'anular_cumplido_manifiesto') {
+    await db().query(
+      "UPDATE manifiesto SET cumplido_estado_rndc = 'pendiente', cumplido_rndc_ingreso_id = NULL WHERE id = ?",
+      [Number(row.referencia_id)],
+    );
+  }
+  if (tipo === 'anular_cumplido_remesa') {
+    await db().query(
+      "UPDATE remesa SET cumplido_estado_rndc = 'pendiente', cumplido_rndc_ingreso_id = NULL WHERE id = ?",
+      [Number(row.referencia_id)],
+    );
+  }
+  // anular_cumplido_inicial_remesa (54): es un paso previo exigido por el RNDC,
+  // no lo modelamos como estado propio — su ingreso queda en cola_envios (Cola).
+  // Anular manifiesto/remesa (32/9): estado final 'anulado' + número de anulación.
+  if (tipo === 'anular_manifiesto') {
+    await db().query(
+      "UPDATE manifiesto SET estado_rndc = 'anulado', anulacion_rndc_id = ?, anulado_at = NOW() WHERE id = ?",
+      [resp.ingresoId, Number(row.referencia_id)],
+    );
+  }
+  if (tipo === 'anular_remesa') {
+    await db().query(
+      "UPDATE remesa SET estado_rndc = 'anulado', anulacion_rndc_id = ?, anulado_at = NOW() WHERE id = ?",
       [resp.ingresoId, Number(row.referencia_id)],
     );
   }
@@ -320,6 +442,71 @@ export async function consultarSeguridadQr(manifiestoId: number): Promise<ItemRe
 }
 
 /** Applies the outcome of one send to its queue row (success / retry-or-fail). */
+/**
+ * Remediación reactiva del cumplido inicial de remesa (proc 54).
+ *
+ * El RNDC a veces rechaza un anular_cumplido_remesa / anular_remesa exigiendo
+ * que primero se anule el "cumplido inicial de remesa". Cuando detectamos eso en
+ * el error, inyectamos un paso 54 justo antes del que falló y re-encolamos ese
+ * paso SIN gastarle intento; el worker corre 54 primero (por orden) y luego
+ * reintenta solo.
+ *
+ * OJO: todavía no tenemos el código exacto del rechazo, así que matcheamos por
+ * la frase "cumplido inicial" y logueamos el error crudo para endurecerlo luego.
+ * Devuelve true si remedió (el llamador debe cortar y no contar la falla).
+ */
+async function remediarCumplidoInicial(row: Row, resp: RndcRespuesta): Promise<boolean> {
+  const tipo = row.tipo_documento;
+  if (tipo !== 'anular_cumplido_remesa' && tipo !== 'anular_remesa') return false;
+  const texto = `${resp.error ?? ''} ${resp.respuestaCruda ?? ''}`.toLowerCase();
+  if (!texto.includes('cumplido inicial')) return false;
+
+  const manifiestoId = Number(row.manifiesto_id);
+  const remesaId = Number(row.referencia_id);
+
+  // Anti-bucle: inyectamos el 54 una sola vez por remesa. Si ya existe, dejamos
+  // que el flujo normal de error/reintento maneje el rechazo.
+  const ya = await fila(
+    db(),
+    `SELECT id FROM cola_envios WHERE manifiesto_id = ? AND tipo_documento = 'anular_cumplido_inicial_remesa' AND referencia_id = ?`,
+    [manifiestoId, remesaId],
+  );
+  if (ya !== null) return false;
+
+  const rem = await fila(db(), 'SELECT num_remesa, anulacion_motivo, anulacion_observaciones FROM remesa WHERE id = ?', [
+    remesaId,
+  ]);
+  const manif = await fila(db(), 'SELECT num_manifiesto FROM manifiesto WHERE id = ?', [manifiestoId]);
+  if (rem === null || manif === null) return false;
+
+  const nit = (await obtenerEmpresa()).nit;
+  const motivoCump = rem.anulacion_motivo === 'D' ? 'D' : 'O';
+  const obs = String(rem.anulacion_observaciones ?? '');
+  const payload = payloadAnularCumplidoInicialRemesa(nit, rem.num_remesa, manif.num_manifiesto, motivoCump, obs);
+
+  // Inserta el 54 con orden justo por debajo del paso que falló → corre primero.
+  await insertarCola(
+    db(),
+    Number(row.solicitud_id),
+    manifiestoId,
+    'anular_cumplido_inicial_remesa',
+    remesaId,
+    payload,
+    Number(row.orden) - 1,
+  );
+  // Re-encola el paso que falló SIN gastarle intento.
+  await db().query(
+    "UPDATE cola_envios SET estado = 'pendiente', ultimo_error = ?, respuesta_rndc = ?, programado_para = NULL WHERE id = ?",
+    [resp.error, resp.respuestaCruda, Number(row.id)],
+  );
+  // Log del rechazo crudo para capturar el código real y endurecer el match.
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[anulacion] Inyectado paso 54 (cumplido inicial) para remesa ${remesaId}. Error RNDC crudo: ${resp.error ?? resp.respuestaCruda}`,
+  );
+  return true;
+}
+
 async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number): Promise<void> {
   const id = Number(row.id);
   if (resp.ok) {
@@ -333,6 +520,8 @@ async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number):
     await marcarOrigen(row, resp);
     return;
   }
+  // Antes de contar la falla: ¿el RNDC pide anular primero el cumplido inicial?
+  if (await remediarCumplidoInicial(row, resp)) return;
   const intentos = Number(row.intentos) + 1;
   const agotado = intentos >= Number(row.max_intentos);
   if (agotado) {
@@ -350,9 +539,11 @@ async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number):
 
 /** Preview text for safe mode (documents show XML, masters a note). */
 function previewSeguro(rndc: RndcClient, row: Row): string {
-  return ['remesa', 'manifiesto'].includes(row.tipo_documento)
-    ? rndc.previewXmlInterno(Number(row.proceso_rndc), String(row.payload_xml))
-    : `(envío del maestro ${row.tipo_documento} #${row.referencia_id})`;
+  // Los maestros (tercero/vehículo) se envían por su repo, no llevan XML propio;
+  // todo lo demás (remesa/manifiesto/cumplido/anulación) sí — refleja el envío real.
+  return ['tercero', 'vehiculo'].includes(row.tipo_documento)
+    ? `(envío del maestro ${row.tipo_documento} #${row.referencia_id})`
+    : rndc.previewXmlInterno(Number(row.proceso_rndc), String(row.payload_xml));
 }
 
 export interface DrenarResult {
@@ -724,6 +915,13 @@ export function payloadAnularRemesa(nit: string, numRemesa: unknown, motivo: str
 const FILTROS: Record<string, string[]> = {
   despacho: ['remesa', 'manifiesto'],
   cumplido: ['cumplido_remesa', 'cumplido_manifiesto'],
+  anulacion: [
+    'anular_cumplido_manifiesto',
+    'anular_cumplido_remesa',
+    'anular_cumplido_inicial_remesa',
+    'anular_manifiesto',
+    'anular_remesa',
+  ],
 };
 
 /** Lists the queue. Port of listar(). */
