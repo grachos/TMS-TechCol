@@ -285,7 +285,7 @@ export default function ColaMonitor() {
                             <Send size={15} />
                           </button>
                         )}
-                        {isAdmin && ['pendiente', 'error'].includes(f.estado) && !String(f.tipo_documento).startsWith('anular_') && (
+                        {isAdmin && ['pendiente', 'error'].includes(f.estado) && (
                           <button
                             className="btn-ghost px-2 py-1 text-slate-500"
                             title="Cancelar (todavía no se envió al RNDC)"

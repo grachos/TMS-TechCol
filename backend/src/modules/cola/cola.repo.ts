@@ -907,6 +907,131 @@ async function remediarObservacionesCortas(row: Row, resp: RndcRespuesta): Promi
   return true;
 }
 
+/**
+ * Inserta (si no existe ya) el paso "anular cumplido de manifiesto" (29) para
+ * un manifiesto puntual, con orden justo por debajo de `ordenDebajoDe`.
+ * Hereda motivo/observaciones de `manifiesto.anulacion_*` (siempre presentes:
+ * se graban al encolar cualquier anulación del manifiesto). No pregunta nada.
+ */
+async function inyectarAnularCumplidoManifiesto(
+  solicitudId: number,
+  manifiestoId: number,
+  ordenDebajoDe: number,
+): Promise<boolean> {
+  const ya = await fila(
+    db(),
+    `SELECT id FROM cola_envios WHERE manifiesto_id = ? AND tipo_documento = 'anular_cumplido_manifiesto' AND referencia_id = ?`,
+    [manifiestoId, manifiestoId],
+  );
+  if (ya !== null) return false;
+
+  const manif = await fila(
+    db(),
+    'SELECT num_manifiesto, cumplido_estado_rndc, anulacion_motivo, anulacion_observaciones FROM manifiesto WHERE id = ?',
+    [manifiestoId],
+  );
+  if (manif === null || manif.cumplido_estado_rndc !== 'aceptado') return false;
+
+  const nit = (await obtenerEmpresa()).nit;
+  const motivo = manif.anulacion_motivo === 'D' ? 'D' : 'O';
+  const obs = String(manif.anulacion_observaciones ?? '');
+  const payload = payloadAnularCumplidoManifiesto(nit, manif.num_manifiesto, motivo, obs);
+  await insertarCola(db(), solicitudId, manifiestoId, 'anular_cumplido_manifiesto', manifiestoId, payload, ordenDebajoDe - 1);
+  return true;
+}
+
+/**
+ * Inserta (si no existe ya) el paso "anular cumplido de remesa" (28) para una
+ * remesa puntual, con orden justo por debajo de `ordenDebajoDe`. Hereda
+ * motivo/observaciones de `remesa.anulacion_*`; si la remesa no los tiene
+ * (p.ej. se anuló solo el manifiesto desde Cola, sin tocar sus remesas), cae
+ * al motivo/observaciones del manifiesto. No pregunta nada.
+ */
+async function inyectarAnularCumplidoRemesa(
+  solicitudId: number,
+  manifiestoId: number,
+  remesaId: number,
+  ordenDebajoDe: number,
+): Promise<boolean> {
+  const ya = await fila(
+    db(),
+    `SELECT id FROM cola_envios WHERE manifiesto_id = ? AND tipo_documento = 'anular_cumplido_remesa' AND referencia_id = ?`,
+    [manifiestoId, remesaId],
+  );
+  if (ya !== null) return false;
+
+  const rem = await fila(
+    db(),
+    'SELECT num_remesa, cumplido_estado_rndc, anulacion_motivo, anulacion_observaciones FROM remesa WHERE id = ?',
+    [remesaId],
+  );
+  if (rem === null || rem.cumplido_estado_rndc !== 'aceptado') return false;
+
+  let motivoCod = rem.anulacion_motivo;
+  let obsTexto = rem.anulacion_observaciones;
+  if (motivoCod === null || motivoCod === undefined) {
+    const manif = await fila(db(), 'SELECT anulacion_motivo, anulacion_observaciones FROM manifiesto WHERE id = ?', [manifiestoId]);
+    motivoCod = manif?.anulacion_motivo ?? null;
+    obsTexto = manif?.anulacion_observaciones ?? obsTexto;
+  }
+
+  const nit = (await obtenerEmpresa()).nit;
+  const motivo = motivoCod === 'D' ? 'D' : 'O';
+  const obs = String(obsTexto ?? '');
+  const payload = payloadAnularCumplidoRemesa(nit, rem.num_remesa, motivo, obs);
+  await insertarCola(db(), solicitudId, manifiestoId, 'anular_cumplido_remesa', remesaId, payload, ordenDebajoDe - 1);
+  return true;
+}
+
+/**
+ * Remediación reactiva: el RNDC rechaza anular_manifiesto con ANM030 ("...ya
+ * fue cumplido o alguna de sus remesas ya fue cumplida") o anular_remesa con
+ * ANR016 ("La Remesa se encuentra Cumplida") cuando el cumplido normal (no el
+ * inicial) sigue activo — típicamente porque el usuario CANCELÓ el paso de
+ * anular ese cumplido antes de que se enviara (Cola permite cancelar
+ * cualquier fila que aún no se envió). En vez de bloquear esa cancelación,
+ * se deja que el RNDC la rechace y aquí se re-crea el paso que falta
+ * (heredando motivo/observaciones ya guardados) y se reintenta solo — el
+ * despacho vuelve exactamente al mismo punto que si nunca se hubiera
+ * cancelado nada.
+ */
+async function remediarCumplidoPendienteAntesDeAnular(row: Row, resp: RndcRespuesta): Promise<boolean> {
+  const tipo = row.tipo_documento;
+  const solicitudId = Number(row.solicitud_id);
+  const manifiestoId = Number(row.manifiesto_id);
+  const orden = Number(row.orden);
+  const texto = `${resp.error ?? ''} ${resp.respuestaCruda ?? ''}`;
+  let inyecto = false;
+
+  if (tipo === 'anular_manifiesto' && texto.includes('ANM030')) {
+    inyecto = await inyectarAnularCumplidoManifiesto(solicitudId, manifiestoId, orden);
+    const [remesaRows] = await db().query<RowDataPacket[]>(
+      `SELECT r.id FROM remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id WHERE mr.manifiesto_id = ?`,
+      [manifiestoId],
+    );
+    for (const rem of remesaRows as Row[]) {
+      const inyectadoRem = await inyectarAnularCumplidoRemesa(solicitudId, manifiestoId, Number(rem.id), orden);
+      inyecto = inyecto || inyectadoRem;
+    }
+  } else if (tipo === 'anular_remesa' && texto.includes('ANR016')) {
+    inyecto = await inyectarAnularCumplidoRemesa(solicitudId, manifiestoId, Number(row.referencia_id), orden);
+  } else {
+    return false;
+  }
+
+  // Nada que inyectar (ya existía o el cumplido ya no está 'aceptado'): deja
+  // que el flujo normal de error/reintento maneje un rechazo persistente.
+  if (!inyecto) return false;
+
+  await db().query(
+    "UPDATE cola_envios SET estado = 'pendiente', ultimo_error = ?, respuesta_rndc = ?, programado_para = NULL WHERE id = ?",
+    [resp.error, resp.respuestaCruda, Number(row.id)],
+  );
+  // eslint-disable-next-line no-console
+  console.warn(`[anulacion] ${tipo} #${row.id}: se re-creó el/los paso(s) de anular cumplido (cancelados antes) y se libera la cascada.`);
+  return true;
+}
+
 async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number): Promise<void> {
   const id = Number(row.id);
   if (resp.ok) {
@@ -926,6 +1051,8 @@ async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number):
   if (await remediarNoCumplido(row, resp)) return;
   // ¿O rechaza por observaciones muy cortas (payload viejo, de antes del relleno)?
   if (await remediarObservacionesCortas(row, resp)) return;
+  // ¿O rechaza porque el cumplido normal sigue activo (se canceló ese paso antes)?
+  if (await remediarCumplidoPendienteAntesDeAnular(row, resp)) return;
   const intentos = Number(row.intentos) + 1;
   const agotado = intentos >= Number(row.max_intentos);
   if (agotado) {
@@ -1021,22 +1148,19 @@ const LOTE_DESPACHO = ['tercero', 'vehiculo', 'remesa', 'manifiesto'];
  * - cumplido_remesa/cumplido_manifiesto: se cancela solo esa fila; su
  *   cumplido_estado_rndc ya está en 'pendiente' (nunca llegó a 'aceptado'
  *   mientras la fila siga sin enviar), no hay nada más que revertir.
- * - anular_*: NO se puede cancelar. Cancelar un paso de una anulación a medio
- *   camino podría dejarla en un estado imposible de reconciliar (p.ej. el
- *   cumplido ya anulado en el RNDC pero el manifiesto nunca llegó a anularse
- *   localmente) — hay que dejar que termine o reintentarla, nunca borrarla.
+ * - anular_*: se cancela solo esa fila (sin cascada). Si eso deja la cascada
+ *   incompleta (p.ej. se cancela "anular cumplido de manifiesto" pero sigue
+ *   pendiente "anular manifiesto"), el propio RNDC lo va a rechazar con un
+ *   código conocido (ANM030/ANR016/ANM070/ACR070...) — y la remediación
+ *   reactiva de aplicarResultado() re-crea automáticamente el paso que falta
+ *   y reintenta sola, sin pedirle nada al usuario. No hace falta bloquear la
+ *   cancelación de antemano: el sistema se autorepara cuando de verdad hace falta.
  */
 export async function cancelarItem(colaId: number): Promise<ItemResult> {
   const row = await fila(db(), 'SELECT * FROM cola_envios WHERE id = ?', [colaId]);
   if (!row) return { ok: false, mensaje: `Item #${colaId} no encontrado.` };
   if (!['pendiente', 'error'].includes(row.estado)) {
     return { ok: false, mensaje: `No se puede cancelar: ya está en estado "${row.estado}".` };
-  }
-  if (String(row.tipo_documento).startsWith('anular_')) {
-    return {
-      ok: false,
-      mensaje: 'Los pasos de una anulación no se pueden cancelar — espera a que termine o reintenta el envío.',
-    };
   }
 
   return withTransaction(async (conn) => {
