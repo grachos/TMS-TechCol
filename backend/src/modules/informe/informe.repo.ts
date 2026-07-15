@@ -16,7 +16,7 @@ export interface InformeFiltros {
   q?: string;
   numRemesa?: string;
   numManifiesto?: string;
-  estado?: string; // '' | 'pendiente' | 'despachado' | 'cumplido'
+  estado?: string; // '' | 'pendiente' | 'despachado' | 'cumplido' | 'anulacion_pendiente' | 'anulado'
   cliente?: string;
   desde?: string;
   hasta?: string;
@@ -39,7 +39,11 @@ const NATURALEZAS: Record<string, string> = {
 
 const fullName = (a: string) => `TRIM(CONCAT_WS(' ', ${a}.nombre, NULLIF(${a}.primer_apellido,''), NULLIF(${a}.segundo_apellido,'')))`;
 
+// 'anulado'/'anulacion_pendiente' se revisan primero: son la verdad final del
+// manifiesto sin importar qué tan lejos había llegado su cumplido antes.
 const ESTADO_PROCESO_SQL = `CASE
+    WHEN m.estado_rndc = 'anulado' THEN 'anulado'
+    WHEN m.estado_rndc = 'anulacion_pendiente' THEN 'anulacion_pendiente'
     WHEN m.cumplido_estado_rndc = 'aceptado' THEN 'cumplido'
     WHEN m.estado_rndc = 'aceptado' OR s.estado = 'despachada' THEN 'despachado'
     ELSE 'pendiente'
@@ -48,12 +52,16 @@ const ESTADO_PROCESO_SQL = `CASE
 /** WHERE fragment for the derived process status (references m + s). */
 function estadoWhere(estado?: string): string | null {
   switch (estado) {
+    case 'anulado':
+      return "m.estado_rndc = 'anulado'";
+    case 'anulacion_pendiente':
+      return "m.estado_rndc = 'anulacion_pendiente'";
     case 'cumplido':
-      return "m.cumplido_estado_rndc = 'aceptado'";
+      return "(m.estado_rndc IS NULL OR m.estado_rndc NOT IN ('anulado','anulacion_pendiente')) AND m.cumplido_estado_rndc = 'aceptado'";
     case 'despachado':
-      return "(m.estado_rndc = 'aceptado' OR s.estado = 'despachada') AND (m.cumplido_estado_rndc IS NULL OR m.cumplido_estado_rndc <> 'aceptado')";
+      return "(m.estado_rndc IS NULL OR m.estado_rndc NOT IN ('anulado','anulacion_pendiente')) AND (m.estado_rndc = 'aceptado' OR s.estado = 'despachada') AND (m.cumplido_estado_rndc IS NULL OR m.cumplido_estado_rndc <> 'aceptado')";
     case 'pendiente':
-      return "(m.estado_rndc IS NULL OR m.estado_rndc <> 'aceptado') AND s.estado <> 'despachada' AND (m.cumplido_estado_rndc IS NULL OR m.cumplido_estado_rndc <> 'aceptado')";
+      return "(m.estado_rndc IS NULL OR m.estado_rndc NOT IN ('aceptado','anulado','anulacion_pendiente')) AND s.estado <> 'despachada' AND (m.cumplido_estado_rndc IS NULL OR m.cumplido_estado_rndc <> 'aceptado')";
     default:
       return null;
   }

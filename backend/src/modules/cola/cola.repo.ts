@@ -1155,7 +1155,58 @@ const LOTE_DESPACHO = ['tercero', 'vehiculo', 'remesa', 'manifiesto'];
  *   reactiva de aplicarResultado() re-crea automáticamente el paso que falta
  *   y reintenta sola, sin pedirle nada al usuario. No hace falta bloquear la
  *   cancelación de antemano: el sistema se autorepara cuando de verdad hace falta.
+ *   Además, si tras cancelar ya no queda NADA activo de la anulación (ver
+ *   revertirAnulacionSiNoQuedaNadaActivo), el despacho vuelve a 'aceptado'
+ *   -botón "Anular" disponible de nuevo- sin necesidad de cancelar todo el lote.
  */
+
+const TIPOS_ANULACION_MANIFIESTO = ['anular_cumplido_manifiesto', 'anular_manifiesto'];
+const TIPOS_ANULACION_REMESA = ['anular_cumplido_remesa', 'anular_cumplido_inicial_remesa', 'anular_remesa'];
+
+/**
+ * Tras cancelar un paso de anulación, revisa si al manifiesto (y a cada una
+ * de sus remesas) ya no le queda NADA activo de su intento de anulación
+ * (pendiente/error/enviando) — sin importar si algún paso anterior ya llegó a
+ * 'enviado' — y, de ser así, revierte estado_rndc de 'anulacion_pendiente' a
+ * 'aceptado': el despacho vuelve a ser uno normal, con "Anular" disponible de
+ * nuevo. No hace falta cancelar TODOS los pasos a la vez — basta con que, tras
+ * esta cancelación puntual, no quede ninguno más en curso. Si se vuelve a
+ * pedir "Anular", calcularPasosAnulacion() recalcula desde el estado actual y
+ * solo crea los pasos que de verdad faltan (los que ya tuvieron éxito quedan
+ * reflejados en cumplido_estado_rndc/estado_rndc y no se repiten en Cola).
+ */
+async function revertirAnulacionSiNoQuedaNadaActivo(conn: Queryable, manifiestoId: number): Promise<void> {
+  const quedaAlgoActivo = async (referenciaId: number, tipos: string[]): Promise<boolean> => {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT id FROM cola_envios WHERE manifiesto_id = ? AND referencia_id = ? AND tipo_documento IN (?)
+         AND estado IN ('pendiente','error','enviando') LIMIT 1`,
+      [manifiestoId, referenciaId, tipos],
+    );
+    return rows.length > 0;
+  };
+
+  const manif = await fila(conn, 'SELECT estado_rndc FROM manifiesto WHERE id = ?', [manifiestoId]);
+  if (manif?.estado_rndc === 'anulacion_pendiente' && !(await quedaAlgoActivo(manifiestoId, TIPOS_ANULACION_MANIFIESTO))) {
+    await conn.query(
+      "UPDATE manifiesto SET estado_rndc = 'aceptado', anulacion_motivo = NULL, anulacion_observaciones = NULL, anulado_por = NULL WHERE id = ?",
+      [manifiestoId],
+    );
+  }
+
+  const [remesaRows] = await conn.query<RowDataPacket[]>(
+    `SELECT r.id, r.estado_rndc FROM remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id WHERE mr.manifiesto_id = ?`,
+    [manifiestoId],
+  );
+  for (const rem of remesaRows as Row[]) {
+    if (rem.estado_rndc !== 'anulacion_pendiente') continue;
+    if (await quedaAlgoActivo(Number(rem.id), TIPOS_ANULACION_REMESA)) continue;
+    await conn.query(
+      "UPDATE remesa SET estado_rndc = 'aceptado', anulacion_motivo = NULL, anulacion_observaciones = NULL, anulado_por = NULL WHERE id = ?",
+      [rem.id],
+    );
+  }
+}
+
 export async function cancelarItem(colaId: number): Promise<ItemResult> {
   const row = await fila(db(), 'SELECT * FROM cola_envios WHERE id = ?', [colaId]);
   if (!row) return { ok: false, mensaje: `Item #${colaId} no encontrado.` };
@@ -1183,6 +1234,9 @@ export async function cancelarItem(colaId: number): Promise<ItemResult> {
     }
 
     await conn.query('DELETE FROM cola_envios WHERE id = ?', [colaId]);
+    if (String(row.tipo_documento).startsWith('anular_')) {
+      await revertirAnulacionSiNoQuedaNadaActivo(conn, Number(row.manifiesto_id));
+    }
     return { ok: true, mensaje: 'Envío cancelado.' };
   });
 }
@@ -1816,7 +1870,10 @@ export async function contarDespachosPendientes(): Promise<number> {
 export async function contarPendientesCumplido(): Promise<number> {
   return cached('badge:cumplido', BADGE_TTL_MS, async () => {
     const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
-      "SELECT COUNT(*) AS n FROM manifiesto WHERE cumplido_estado_rndc = 'pendiente'",
+      // estado_rndc = 'aceptado': un manifiesto en anulacion_pendiente/anulado
+      // no debe seguir apareciendo como pendiente por cumplir (su cumplido_estado_rndc
+      // puede seguir en 'pendiente' por defecto si nunca se cumplió antes de anularse).
+      "SELECT COUNT(*) AS n FROM manifiesto WHERE cumplido_estado_rndc = 'pendiente' AND estado_rndc = 'aceptado'",
     );
     return Number(rows[0]?.n ?? 0);
   });
@@ -1833,7 +1890,7 @@ export async function listarPendientesCumplido(): Promise<Row[]> {
      JOIN solicitud_servicio s ON s.id = m.solicitud_id
      JOIN manifiesto_remesa mr2 ON mr2.manifiesto_id = m.id
      JOIN remesa r2 ON r2.id = mr2.remesa_id
-     WHERE m.cumplido_estado_rndc = 'pendiente'
+     WHERE m.cumplido_estado_rndc = 'pendiente' AND m.estado_rndc = 'aceptado'
      GROUP BY m.id, m.solicitud_id, s.consecutivo, m.num_manifiesto, m.placa_vehiculo
      ORDER BY m.id DESC`,
   );
