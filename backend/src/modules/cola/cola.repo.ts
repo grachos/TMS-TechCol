@@ -779,6 +779,41 @@ async function remediarCumplidoInicial(row: Row, resp: RndcRespuesta): Promise<b
   return true;
 }
 
+/**
+ * Remediación reactiva: el RNDC rechaza anular_cumplido_remesa / anular_cumplido_manifiesto
+ * con ACR070/ACM070 ("...no ha sido Cumplido") cuando el documento en realidad
+ * NUNCA fue cumplido allá — nuestro estado local ('aceptado') estaba
+ * desactualizado o era incorrecto. En ese caso no hay nada que anular: se
+ * trata como resuelto (no bloquea la cascada hacia anular manifiesto/remesa)
+ * y se corrige el estado local a 'pendiente', igual que si la anulación
+ * hubiera tenido éxito — así el manifiesto/remesa quedan libres para
+ * anularse aunque su cumplido nunca haya sido real.
+ */
+async function remediarNoCumplido(row: Row, resp: RndcRespuesta): Promise<boolean> {
+  const tipo = row.tipo_documento;
+  if (tipo !== 'anular_cumplido_remesa' && tipo !== 'anular_cumplido_manifiesto') return false;
+  const texto = `${resp.error ?? ''} ${resp.respuestaCruda ?? ''}`;
+  const codigo = tipo === 'anular_cumplido_remesa' ? 'ACR070' : 'ACM070';
+  if (!texto.includes(codigo)) return false;
+
+  const id = Number(row.id);
+  await db().query(
+    `UPDATE cola_envios
+     SET estado = 'enviado', rndc_ingreso_id = NULL, respuesta_rndc = ?, ultimo_error = NULL,
+         intentos = intentos + 1, enviado_at = NOW()
+     WHERE id = ?`,
+    [resp.respuestaCruda, id],
+  );
+  // marcarOrigen() no usa resp.ingresoId para estas dos ramas — solo vuelve el
+  // cumplido a 'pendiente', que es exactamente el efecto que buscamos aquí.
+  await marcarOrigen(row, resp);
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[anulacion] ${tipo} #${id} (${codigo}): el RNDC dice que nunca fue cumplido. Se omite y se libera la cascada.`,
+  );
+  return true;
+}
+
 async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number): Promise<void> {
   const id = Number(row.id);
   if (resp.ok) {
@@ -794,6 +829,8 @@ async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number):
   }
   // Antes de contar la falla: ¿el RNDC pide anular primero el cumplido inicial?
   if (await remediarCumplidoInicial(row, resp)) return;
+  // ¿O dice que el documento nunca fue cumplido, así que no hay nada que anular?
+  if (await remediarNoCumplido(row, resp)) return;
   const intentos = Number(row.intentos) + 1;
   const agotado = intentos >= Number(row.max_intentos);
   if (agotado) {
