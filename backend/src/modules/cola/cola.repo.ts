@@ -1888,8 +1888,12 @@ export async function actualizarDespacho(manifiestoId: number, datos: Row): Prom
 /** Count of remesas not yet accepted by the RNDC. Backs the "Despachos" nav badge. */
 export async function contarDespachosPendientes(): Promise<number> {
   return cached('badge:despachos', BADGE_TTL_MS, async () => {
+    // 'anulado'/'anulacion_pendiente' no son "pendientes por despachar" — ya
+    // no van a llegar a 'aceptado' por esa vía (o ya nunca deberían), así que
+    // no deben inflar el contador. Ver también listarDespachosConPaginacion(),
+    // que ya excluye 'anulado' de la lista misma.
     const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
-      "SELECT COUNT(*) AS n FROM remesa WHERE estado_rndc <> 'aceptado'",
+      "SELECT COUNT(*) AS n FROM remesa WHERE estado_rndc NOT IN ('aceptado', 'anulado', 'anulacion_pendiente')",
     );
     return Number(rows[0]?.n ?? 0);
   });
