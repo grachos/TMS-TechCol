@@ -6,13 +6,26 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Send, Loader2, FileCode, Play, X } from 'lucide-react';
+import { Send, Loader2, FileCode, Play, X, Ban, TriangleAlert } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import { Alert } from '../../components/Alert';
 import { StatusBadge } from '../../components/StatusBadge';
 
 type Row = Record<string, any>;
+
+type MotivoAnulacion = 'digitacion' | 'cancelacion';
+
+interface PreviewAnulacionIndividual {
+  puedeAnular: boolean;
+  motivoBloqueo: string | null;
+  tipoAnulacion: string | null;
+  label: string | null;
+  consecutivo: string | null;
+}
+
+/** Tipos de documento que se pueden anular individualmente desde esta fila (no las propias filas anular_*). */
+const ANULABLES = new Set(['remesa', 'manifiesto', 'cumplido_remesa', 'cumplido_manifiesto']);
 
 interface ColaResponse {
   filas: Row[];
@@ -64,6 +77,12 @@ export default function ColaMonitor() {
   const [procesando, setProcesando] = useState(false);
   const [flash, setFlash] = useState<{ kind: 'ok' | 'err'; message: string } | null>(null);
   const [xml, setXml] = useState<{ id: number; text: string } | null>(null);
+  const [anularRow, setAnularRow] = useState<{ id: number; documento: string } | null>(null);
+  const [preview, setPreview] = useState<PreviewAnulacionIndividual | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [motivo, setMotivo] = useState<MotivoAnulacion>('digitacion');
+  const [observaciones, setObservaciones] = useState('');
+  const [anulando, setAnulando] = useState(false);
 
   const proceso = params.get('proceso') ?? 'todos';
 
@@ -113,6 +132,37 @@ export default function ColaMonitor() {
       setXml({ id, text: typeof text === 'string' ? text : JSON.stringify(text, null, 2) });
     } catch (e) {
       setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo cargar el XML.' });
+    }
+  }
+
+  async function abrirAnular(id: number, documento: string) {
+    setAnularRow({ id, documento });
+    setPreview(null);
+    setMotivo('digitacion');
+    setObservaciones('');
+    setPreviewLoading(true);
+    try {
+      setPreview(await api<PreviewAnulacionIndividual>(`/cola/${id}/anular`));
+    } catch (e) {
+      setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo cargar el preview de anulación.' });
+      setAnularRow(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function confirmarAnular() {
+    if (!anularRow) return;
+    setAnulando(true);
+    try {
+      await api(`/cola/${anularRow.id}/anular`, { method: 'POST', body: { motivo, observaciones } });
+      setFlash({ kind: 'ok', message: 'Anulación encolada. Revisa el progreso y el número de aceptación en esta misma lista.' });
+      setAnularRow(null);
+      await load();
+    } catch (e) {
+      setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo encolar la anulación.' });
+    } finally {
+      setAnulando(false);
     }
   }
 
@@ -217,6 +267,15 @@ export default function ColaMonitor() {
                             <Send size={15} />
                           </button>
                         )}
+                        {isAdmin && f.estado === 'enviado' && ANULABLES.has(f.tipo_documento) && f.estado_origen === 'aceptado' && (
+                          <button
+                            className="btn-ghost px-2 py-1 text-red-600"
+                            title="Anular este documento"
+                            onClick={() => abrirAnular(f.id, ETIQUETAS[f.tipo_documento] ?? f.tipo_documento)}
+                          >
+                            <Ban size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -236,6 +295,78 @@ export default function ColaMonitor() {
               </button>
             </div>
             <pre className="overflow-auto whitespace-pre-wrap p-4 text-xs text-slate-700">{xml.text}</pre>
+          </div>
+        </div>
+      )}
+
+      {anularRow && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={() => !anulando && setAnularRow(null)}>
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 className="flex items-center gap-2 font-semibold text-slate-800">
+                <Ban size={18} className="text-red-600" /> Anular {anularRow.documento.toLowerCase()}
+              </h3>
+              <button onClick={() => !anulando && setAnularRow(null)} aria-label="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="overflow-auto p-4">
+              {previewLoading && (
+                <div className="flex justify-center py-6 text-slate-400">
+                  <Loader2 size={20} className="animate-spin" />
+                </div>
+              )}
+
+              {!previewLoading && preview && !preview.puedeAnular && (
+                <Alert kind="err" message={preview.motivoBloqueo ?? 'No se puede anular este documento.'} />
+              )}
+
+              {!previewLoading && preview?.puedeAnular && (
+                <>
+                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                    <TriangleAlert size={18} className="mt-0.5 shrink-0" />
+                    <p>
+                      Esta acción es <strong>irreversible</strong> y se reporta al RNDC: {preview.label} ({preview.consecutivo}
+                      ). Solo este documento, sin afectar el resto del despacho.
+                    </p>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="field-label">Motivo de la anulación</label>
+                    <select className="field-input" value={motivo} onChange={(e) => setMotivo(e.target.value as MotivoAnulacion)}>
+                      <option value="digitacion">Error de digitación</option>
+                      <option value="cancelacion">Cancelación del servicio</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">Observaciones</label>
+                    <textarea
+                      className="field-input"
+                      rows={3}
+                      value={observaciones}
+                      onChange={(e) => setObservaciones(e.target.value)}
+                      placeholder="Comentario opcional para el RNDC…"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-4 py-3">
+              <button className="btn-ghost" disabled={anulando} onClick={() => setAnularRow(null)}>
+                Cancelar
+              </button>
+              {preview?.puedeAnular && (
+                <button className="btn-primary bg-red-600 hover:bg-red-700" disabled={anulando} onClick={confirmarAnular}>
+                  {anulando ? <Loader2 size={16} className="animate-spin" /> : <Ban size={16} />}
+                  Confirmar anulación
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

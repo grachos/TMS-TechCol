@@ -6,6 +6,8 @@
  *   POST /api/cola/procesar          drain the queue (admin — may hit RNDC)
  *   POST /api/cola/:id/procesar      process one item (admin)
  *   GET  /api/cola/:id/xml           XML preview + RNDC response (text/plain)
+ *   GET  /api/cola/:id/anular        preview de anulación individual de esta fila (admin)
+ *   POST /api/cola/:id/anular        encola la anulación individual (admin)
  *
  *   GET  /api/despachos              dispatches list (q, p, desde, hasta)
  *   GET  /api/despachos/resumen      count not yet accepted by RNDC (nav badge polling)
@@ -32,6 +34,9 @@ colaRouter.use(requirePagina('cola'));
 
 const validProceso = (p: unknown): 'todos' | 'despacho' | 'cumplido' | 'anulacion' =>
   p === 'despacho' || p === 'cumplido' || p === 'anulacion' ? p : 'todos';
+
+/** Motivo que el usuario elige en el modal de anulación (cascada o individual). */
+const MOTIVOS_ANULACION = ['digitacion', 'cancelacion'] as const;
 
 colaRouter.get(
   '/',
@@ -83,6 +88,39 @@ colaRouter.get(
   asyncHandler(async (req, res) => {
     const { found, text } = await cola.xmlDe(Number(req.params.id));
     res.type('text/plain; charset=utf-8').status(found ? 200 : 404).send(text);
+  }),
+);
+
+/**
+ * GET /api/cola/:id/anular — preview de la anulación individual de esta fila
+ * ya enviada (una remesa suelta, solo el manifiesto, o solo un cumplido), sin
+ * arrastrar el resto de la cascada. Solo lectura, no toca el RNDC.
+ */
+colaRouter.get(
+  '/:id/anular',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    res.json(await cola.previsualizarAnulacionIndividual(Number(req.params.id)));
+  }),
+);
+
+/** POST /api/cola/:id/anular — encola la anulación individual de esta fila. */
+colaRouter.post(
+  '/:id/anular',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const { motivo, observaciones } = req.body ?? {};
+    if (!MOTIVOS_ANULACION.includes(motivo)) {
+      throw badRequest('Motivo de anulación inválido.');
+    }
+    try {
+      await withTransaction(async (conn) => {
+        await cola.encolarAnulacionIndividual(conn, Number(req.params.id), motivo, String(observaciones ?? ''), req.user!.sub);
+      });
+    } catch (e) {
+      throw badRequest(e instanceof Error ? e.message : 'No se pudo encolar la anulación.');
+    }
+    res.json({ ok: true });
   }),
 );
 
@@ -167,8 +205,6 @@ despachoRouter.get(
     res.json(await cola.previsualizarAnulacion(Number(req.params.manifiestoId)));
   }),
 );
-
-const MOTIVOS_ANULACION = ['digitacion', 'cancelacion'] as const;
 
 /**
  * POST /api/despachos/:manifiestoId/anular — encola la anulación completa del

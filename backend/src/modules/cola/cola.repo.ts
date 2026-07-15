@@ -385,6 +385,192 @@ export async function encolarAnulacion(
   );
 }
 
+// ---------- Anulación individual (por fila de Cola, sin cascada) ----------
+//
+// Además de la anulación completa del despacho (encolarAnulacion, arriba), el
+// usuario puede anular UN solo documento ya enviado — una remesa suelta, solo
+// el manifiesto, o solo un cumplido — sin arrastrar el resto. Cada tipo tiene
+// su propia precondición RNDC (más estrecha que la de la cascada completa).
+
+export interface PreviewAnulacionIndividual {
+  puedeAnular: boolean;
+  motivoBloqueo: string | null;
+  tipoAnulacion: string | null;
+  label: string | null;
+  consecutivo: string | null;
+}
+
+const bloqueoIndividual = (motivo: string): PreviewAnulacionIndividual => ({
+  puedeAnular: false,
+  motivoBloqueo: motivo,
+  tipoAnulacion: null,
+  label: null,
+  consecutivo: null,
+});
+
+/**
+ * Preview de solo lectura para la anulación individual de una fila de Cola ya
+ * enviada (`cola_envios.estado = 'enviado'`). `exec` permite reutilizar esta
+ * misma validación dentro de una transacción (encolarAnulacionIndividual) o
+ * suelta contra el pool (endpoint de preview).
+ */
+export async function previsualizarAnulacionIndividual(
+  colaId: number,
+  exec: Queryable = db(),
+): Promise<PreviewAnulacionIndividual> {
+  const row = await fila(exec, 'SELECT * FROM cola_envios WHERE id = ?', [colaId]);
+  if (row === null) return bloqueoIndividual('Registro de cola no encontrado.');
+  if (row.estado !== 'enviado') {
+    return bloqueoIndividual('Solo se puede anular un documento que ya fue enviado y aceptado por el RNDC.');
+  }
+  const referenciaId = Number(row.referencia_id);
+
+  switch (row.tipo_documento) {
+    case 'remesa': {
+      const rem = await fila(exec, 'SELECT * FROM remesa WHERE id = ?', [referenciaId]);
+      if (rem === null) return bloqueoIndividual('Remesa no encontrada.');
+      if (rem.estado_rndc !== 'aceptado') return bloqueoIndividual(`La remesa ya está en estado "${rem.estado_rndc}".`);
+      if (rem.cumplido_estado_rndc === 'aceptado') {
+        return bloqueoIndividual('Esta remesa ya fue cumplida. Anula primero el cumplido de la remesa.');
+      }
+      // RNDC: una remesa asociada a un manifiesto radicado solo se puede
+      // "liberar", no anular directamente — primero hay que anular el manifiesto.
+      const manif = await fila(
+        exec,
+        `SELECT m.estado_rndc FROM manifiesto m JOIN manifiesto_remesa mr ON mr.manifiesto_id = m.id WHERE mr.remesa_id = ?`,
+        [referenciaId],
+      );
+      if (manif !== null && manif.estado_rndc === 'aceptado') {
+        return bloqueoIndividual('Esta remesa está asociada a un manifiesto radicado. Anula primero el manifiesto.');
+      }
+      return {
+        puedeAnular: true,
+        motivoBloqueo: null,
+        tipoAnulacion: 'anular_remesa',
+        label: ETIQUETA_ANULACION.anular_remesa!,
+        consecutivo: consecutivoRemesaRndc(rem.num_remesa),
+      };
+    }
+    case 'manifiesto': {
+      const manif = await fila(exec, 'SELECT * FROM manifiesto WHERE id = ?', [referenciaId]);
+      if (manif === null) return bloqueoIndividual('Manifiesto no encontrado.');
+      if (manif.estado_rndc !== 'aceptado') return bloqueoIndividual(`El manifiesto ya está en estado "${manif.estado_rndc}".`);
+      if (manif.cumplido_estado_rndc === 'aceptado') {
+        return bloqueoIndividual('Este manifiesto ya fue cumplido. Anula primero su cumplido.');
+      }
+      const [remesaRows] = await exec.query<RowDataPacket[]>(
+        `SELECT r.cumplido_estado_rndc FROM remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id WHERE mr.manifiesto_id = ?`,
+        [referenciaId],
+      );
+      if ((remesaRows as Row[]).some((r) => r.cumplido_estado_rndc === 'aceptado')) {
+        return bloqueoIndividual('Una o más remesas de este manifiesto ya fueron cumplidas. Anula esos cumplidos primero.');
+      }
+      return {
+        puedeAnular: true,
+        motivoBloqueo: null,
+        tipoAnulacion: 'anular_manifiesto',
+        label: ETIQUETA_ANULACION.anular_manifiesto!,
+        consecutivo: manif.num_manifiesto,
+      };
+    }
+    case 'cumplido_remesa': {
+      const rem = await fila(exec, 'SELECT * FROM remesa WHERE id = ?', [referenciaId]);
+      if (rem === null) return bloqueoIndividual('Remesa no encontrada.');
+      if (rem.cumplido_estado_rndc !== 'aceptado') {
+        return bloqueoIndividual(`El cumplido de esta remesa ya está en estado "${rem.cumplido_estado_rndc}".`);
+      }
+      return {
+        puedeAnular: true,
+        motivoBloqueo: null,
+        tipoAnulacion: 'anular_cumplido_remesa',
+        label: ETIQUETA_ANULACION.anular_cumplido_remesa!,
+        consecutivo: consecutivoRemesaRndc(rem.num_remesa),
+      };
+    }
+    case 'cumplido_manifiesto': {
+      const manif = await fila(exec, 'SELECT * FROM manifiesto WHERE id = ?', [referenciaId]);
+      if (manif === null) return bloqueoIndividual('Manifiesto no encontrado.');
+      if (manif.cumplido_estado_rndc !== 'aceptado') {
+        return bloqueoIndividual(`El cumplido de este manifiesto ya está en estado "${manif.cumplido_estado_rndc}".`);
+      }
+      return {
+        puedeAnular: true,
+        motivoBloqueo: null,
+        tipoAnulacion: 'anular_cumplido_manifiesto',
+        label: ETIQUETA_ANULACION.anular_cumplido_manifiesto!,
+        consecutivo: manif.num_manifiesto,
+      };
+    }
+    default:
+      return bloqueoIndividual('Este tipo de documento no se puede anular individualmente.');
+  }
+}
+
+/**
+ * Encola la anulación de UN solo documento (fila de Cola ya enviada), sin
+ * arrastrar el resto de la cascada. Valida con la misma función que el preview
+ * para que nunca diverjan.
+ */
+export async function encolarAnulacionIndividual(
+  conn: Queryable,
+  colaId: number,
+  reason: MotivoAnulacion,
+  observaciones: string,
+  anuladoPor: number | null,
+): Promise<void> {
+  const preview = await previsualizarAnulacionIndividual(colaId, conn);
+  if (!preview.puedeAnular || !preview.tipoAnulacion) {
+    throw new Error(preview.motivoBloqueo ?? 'No se puede anular este documento.');
+  }
+  const row = await fila(conn, 'SELECT * FROM cola_envios WHERE id = ?', [colaId]);
+  const referenciaId = Number(row!.referencia_id);
+  const solicitudId = Number(row!.solicitud_id);
+  const manifiestoId = Number(row!.manifiesto_id);
+  const nit = (await obtenerEmpresa()).nit;
+  const obs = observaciones ?? '';
+  const mBase = motivoBase(reason);
+  const mCump = motivoCumplido(reason);
+
+  let payload: string;
+  switch (preview.tipoAnulacion) {
+    case 'anular_remesa': {
+      const rem = await fila(conn, 'SELECT num_remesa FROM remesa WHERE id = ?', [referenciaId]);
+      payload = payloadAnularRemesa(nit, rem!.num_remesa, mBase, obs);
+      await conn.query(
+        `UPDATE remesa SET estado_rndc = 'anulacion_pendiente', anulacion_motivo = ?,
+           anulacion_observaciones = ?, anulado_por = ? WHERE id = ?`,
+        [mBase, obs, anuladoPor, referenciaId],
+      );
+      break;
+    }
+    case 'anular_manifiesto': {
+      const manif = await fila(conn, 'SELECT num_manifiesto FROM manifiesto WHERE id = ?', [referenciaId]);
+      payload = payloadAnularManifiesto(nit, manif!.num_manifiesto, mBase, obs);
+      await conn.query(
+        `UPDATE manifiesto SET estado_rndc = 'anulacion_pendiente', anulacion_motivo = ?,
+           anulacion_observaciones = ?, anulado_por = ? WHERE id = ?`,
+        [mBase, obs, anuladoPor, referenciaId],
+      );
+      break;
+    }
+    case 'anular_cumplido_remesa': {
+      const rem = await fila(conn, 'SELECT num_remesa FROM remesa WHERE id = ?', [referenciaId]);
+      payload = payloadAnularCumplidoRemesa(nit, rem!.num_remesa, mCump, obs);
+      break;
+    }
+    case 'anular_cumplido_manifiesto': {
+      const manif = await fila(conn, 'SELECT num_manifiesto FROM manifiesto WHERE id = ?', [referenciaId]);
+      payload = payloadAnularCumplidoManifiesto(nit, manif!.num_manifiesto, mCump, obs);
+      break;
+    }
+    default:
+      throw new Error('Tipo de anulación no soportado.');
+  }
+
+  await reemplazarColaPendiente(conn, manifiestoId, preview.tipoAnulacion, referenciaId);
+  await insertarCola(conn, solicitudId, manifiestoId, preview.tipoAnulacion, referenciaId, payload);
+}
+
 /** Is there a lower-`orden` row of the same solicitud not yet 'enviado'? Port of dependenciaPendiente(). */
 async function dependenciaPendiente(solicitudId: number, orden: number): Promise<boolean> {
   const [rows] = await db().query<(RowDataPacket & { n: number })[]>(
@@ -995,9 +1181,21 @@ export async function listar(proceso = 'despacho', limite = 200): Promise<Row[]>
   const filtro = FILTROS[proceso];
   if (filtro) where += ` AND c.tipo_documento IN (${filtro.map((t) => `'${t}'`).join(',')})`;
   const [rows] = await db().query<RowDataPacket[]>(
-    `SELECT c.*, s.consecutivo
+    `SELECT c.*, s.consecutivo,
+       -- Estado actual del documento origen (no de la fila de cola), para que el
+       -- frontend sepa si todavía tiene sentido ofrecer "Anular" en esta fila:
+       -- ya anulado/anulándose no debería mostrar el botón otra vez.
+       CASE c.tipo_documento
+         WHEN 'remesa' THEN r_o.estado_rndc
+         WHEN 'cumplido_remesa' THEN r_o.cumplido_estado_rndc
+         WHEN 'manifiesto' THEN m_o.estado_rndc
+         WHEN 'cumplido_manifiesto' THEN m_o.cumplido_estado_rndc
+         ELSE NULL
+       END AS estado_origen
      FROM cola_envios c
      LEFT JOIN solicitud_servicio s ON s.id = c.solicitud_id
+     LEFT JOIN remesa r_o ON r_o.id = c.referencia_id AND c.tipo_documento IN ('remesa','cumplido_remesa')
+     LEFT JOIN manifiesto m_o ON m_o.id = c.referencia_id AND c.tipo_documento IN ('manifiesto','cumplido_manifiesto')
      ${where}
      ORDER BY c.id DESC LIMIT ${Number(limite)}`,
   );
