@@ -871,6 +871,42 @@ async function remediarNoCumplido(row: Row, resp: RndcRespuesta): Promise<boolea
   return true;
 }
 
+/**
+ * Remediación reactiva: el RNDC rechaza por observaciones muy cortas (ACI052
+ * en el proceso 54: "mínimo 20 caracteres"; se aplica el mismo heurístico de
+ * texto a los demás procesos de anulación por si exigen algo similar sin
+ * código documentado). tagObservaciones() ya rellena con '*' toda anulación
+ * NUEVA — esto solo repara una fila que quedó encolada ANTES de ese fix, con
+ * el payload_xml ya grabado sin relleno: lo regenera y reintenta sin gastar
+ * el intento.
+ */
+async function remediarObservacionesCortas(row: Row, resp: RndcRespuesta): Promise<boolean> {
+  const tipo = String(row.tipo_documento);
+  if (!tipo.startsWith('anular_')) return false;
+  const texto = `${resp.error ?? ''} ${resp.respuestaCruda ?? ''}`.toLowerCase();
+  const esObservacionesCorta =
+    texto.includes('observaciones') && (texto.includes('corto') || texto.includes('mínimo') || texto.includes('minimo'));
+  if (!esObservacionesCorta) return false;
+
+  const payloadActual = String(row.payload_xml);
+  const match = payloadActual.match(/<OBSERVACIONES>([\s\S]*?)<\/OBSERVACIONES>/);
+  const obsActual = match ? match[1]! : '';
+  if (obsActual.length >= OBSERVACIONES_MIN) return false; // ya cumple: no es esto, deja que cuente como fallo real
+
+  const relleno = '*'.repeat(OBSERVACIONES_MIN - obsActual.length);
+  const payloadNuevo = payloadActual.replace(
+    /<OBSERVACIONES>[\s\S]*?<\/OBSERVACIONES>/,
+    `<OBSERVACIONES>${obsActual}${relleno}</OBSERVACIONES>`,
+  );
+  await db().query(
+    "UPDATE cola_envios SET payload_xml = ?, estado = 'pendiente', ultimo_error = ?, respuesta_rndc = ?, programado_para = NULL WHERE id = ?",
+    [payloadNuevo, resp.error, resp.respuestaCruda, Number(row.id)],
+  );
+  // eslint-disable-next-line no-console
+  console.warn(`[anulacion] ${tipo} #${row.id}: observaciones muy cortas, se regeneró el payload con relleno.`);
+  return true;
+}
+
 async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number): Promise<void> {
   const id = Number(row.id);
   if (resp.ok) {
@@ -888,6 +924,8 @@ async function aplicarResultado(row: Row, resp: RndcRespuesta, minutos: number):
   if (await remediarCumplidoInicial(row, resp)) return;
   // ¿O dice que el documento nunca fue cumplido, así que no hay nada que anular?
   if (await remediarNoCumplido(row, resp)) return;
+  // ¿O rechaza por observaciones muy cortas (payload viejo, de antes del relleno)?
+  if (await remediarObservacionesCortas(row, resp)) return;
   const intentos = Number(row.intentos) + 1;
   const agotado = intentos >= Number(row.max_intentos);
   if (agotado) {
@@ -1275,9 +1313,24 @@ async function payloadCumplidoManifiesto(m: Row): Promise<string> {
 // OBSERVACIONES es opcional en el RNDC pero siempre se emite (aunque vacía) para
 // calzar con los XML de referencia del Ministerio.
 
-/** Always-present <OBSERVACIONES> tag (matches the RNDC reference XMLs). */
+/**
+ * Mínimo de caracteres que el RNDC exige en OBSERVACIONES de anulación
+ * (confirmado en el proceso 54 — ACI052: "mínimo 20 caracteres"). Se aplica
+ * igual a los demás procesos de anulación (9/28/29/32) como salvaguarda ante
+ * el mismo tipo de rechazo, aunque su mínimo exacto no esté documentado.
+ */
+const OBSERVACIONES_MIN = 20;
+
+/**
+ * Always-present <OBSERVACIONES> tag (matches the RNDC reference XMLs).
+ * Si el texto queda más corto que el mínimo que exige el RNDC, se completa
+ * con '*' hasta alcanzarlo — evita el rechazo sin inventar contenido real
+ * cuando el usuario dejó las observaciones vacías o breves.
+ */
 function tagObservaciones(obs: string): string {
-  return '<OBSERVACIONES>' + RndcClient.escaparXml(obs ?? '') + '</OBSERVACIONES>';
+  const texto = obs ?? '';
+  const relleno = texto.length < OBSERVACIONES_MIN ? '*'.repeat(OBSERVACIONES_MIN - texto.length) : '';
+  return '<OBSERVACIONES>' + RndcClient.escaparXml(texto + relleno) + '</OBSERVACIONES>';
 }
 
 /** procesoid 29 — Anular Cumplido de Manifiesto. */
