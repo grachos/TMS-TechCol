@@ -63,7 +63,19 @@ manifiestos, RNDC…) se preservan. Si es una instalación nueva:
    migracion_v39_cumplido_cargue_entrada_salida.sql   ← fechas/horas entrada+salida cargue del cumplido
    migracion_v40_push_subscriptions.sql   ← NUEVO (notificaciones push por usuario)
    migracion_v41_indices_estado.sql   ← NUEVO (índices para los contadores de los badges)
+   migracion_v42_anulacion.sql   ← NUEVO (columnas de anulación en manifiesto/remesa)
+   migracion_v43_cola_tipo_documento_anulacion.sql   ← NUEVO — CRÍTICA, correr cuanto antes
    ```
+
+   > **v43 corrige una corrupción silenciosa de datos, no solo un ajuste de
+   > esquema.** `cola_envios.tipo_documento` es un ENUM; los 5 tipos nuevos de
+   > anulación nunca se agregaron a esa lista, así que en MySQL sin modo
+   > estricto cada fila de anulación se guardaba con `tipo_documento = ''` en
+   > vez de fallar. Si ya usaste "Anular" (cascada o individual) antes de
+   > correr esta migración, **v43 también repara** las filas afectadas y, si
+   > el RNDC ya había aceptado la anulación (fila en estado `enviado`), pone al
+   > día el estado del documento origen (`cumplido_estado_rndc`/`estado_rndc`)
+   > que se había quedado desactualizado. Ejecútala antes de seguir anulando.
 
    Todas las migraciones usan `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF
    NOT EXISTS` / `ADD INDEX IF NOT EXISTS`, así que son **idempotentes**: si tu

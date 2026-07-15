@@ -108,6 +108,22 @@ function hora(h: unknown): string {
   return `${hh!.padStart(2, '0')}:${mm}`;
 }
 
+/**
+ * Debe reflejar EXACTAMENTE el ENUM real de `cola_envios.tipo_documento` (ver
+ * migracion_v37 y migracion_v43). En un MySQL sin STRICT_TRANS_TABLES, insertar
+ * un valor fuera del ENUM no falla: MySQL lo guarda en silencio como '' — ya
+ * pasó dos veces (cumplido en v37, anulación en v43) y corrompió filas sin
+ * ningún error visible. Esta validación convierte ese silencio en una
+ * excepción inmediata la próxima vez que se agregue un tipo_documento nuevo
+ * sin también migrar la columna.
+ */
+const TIPOS_DOCUMENTO_VALIDOS = new Set([
+  'remesa', 'manifiesto', 'tercero', 'vehiculo',
+  'cumplido_remesa', 'cumplido_manifiesto',
+  'anular_cumplido_manifiesto', 'anular_cumplido_remesa',
+  'anular_cumplido_inicial_remesa', 'anular_manifiesto', 'anular_remesa',
+]);
+
 /** Inserts a queue row (uses manifiesto_id instead of remesa_id). Port of insertarCola(). */
 async function insertarCola(
   exec: Queryable,
@@ -118,6 +134,11 @@ async function insertarCola(
   payloadXml: string,
   orden: number = ORDEN[tipo]!,
 ): Promise<void> {
+  if (!TIPOS_DOCUMENTO_VALIDOS.has(tipo)) {
+    throw new Error(
+      `tipo_documento "${tipo}" no está en el ENUM de cola_envios.tipo_documento — falta una migración. Ver TIPOS_DOCUMENTO_VALIDOS en cola.repo.ts.`,
+    );
+  }
   await exec.query(
     `INSERT INTO cola_envios
         (solicitud_id, manifiesto_id, tipo_documento, referencia_id, proceso_rndc, orden, payload_xml, estado, max_intentos)
