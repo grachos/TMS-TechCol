@@ -20,7 +20,8 @@ export async function pesoAsignadoSolicitud(
   solicitudId: number,
   excluirManifiestoId: number | null = null,
 ): Promise<number> {
-  let sql = 'SELECT COALESCE(SUM(r.peso), 0) AS total FROM remesa r WHERE r.solicitud_id = ?';
+  // Una remesa anulada ya no ocupa cupo — su peso vuelve a estar disponible.
+  let sql = "SELECT COALESCE(SUM(r.peso), 0) AS total FROM remesa r WHERE r.solicitud_id = ? AND r.estado_rndc <> 'anulado'";
   const params: unknown[] = [solicitudId];
   if (excluirManifiestoId !== null) {
     sql += ' AND r.id NOT IN (SELECT mr.remesa_id FROM manifiesto_remesa mr WHERE mr.manifiesto_id = ?)';

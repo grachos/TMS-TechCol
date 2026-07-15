@@ -5,6 +5,7 @@
  *   GET  /api/cola/resumen           lightweight counts only (nav badge polling)
  *   POST /api/cola/procesar          drain the queue (admin — may hit RNDC)
  *   POST /api/cola/:id/procesar      process one item (admin)
+ *   POST /api/cola/:id/cancelar      cancel a not-yet-sent item (admin)
  *   GET  /api/cola/:id/xml           XML preview + RNDC response (text/plain)
  *   GET  /api/cola/:id/anular        preview de anulación individual de esta fila (admin)
  *   POST /api/cola/:id/anular        encola la anulación individual (admin)
@@ -80,6 +81,19 @@ colaRouter.post(
     // or a rejected RNDC send), not an HTTP-level error — the frontend reads
     // `ok`/`mensaje` directly to show the flash message either way.
     res.json(await cola.procesarItem(Number(req.params.id)));
+  }),
+);
+
+/**
+ * POST /api/cola/:id/cancelar — cancels a row that hasn't been sent to the
+ * RNDC yet (estado pendiente/error). Unlike anular, nothing is reported to
+ * the Ministry — it's a purely local cleanup.
+ */
+colaRouter.post(
+  '/:id/cancelar',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    res.json(await cola.cancelarItem(Number(req.params.id)));
   }),
 );
 

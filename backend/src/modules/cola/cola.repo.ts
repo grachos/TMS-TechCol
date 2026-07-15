@@ -661,6 +661,27 @@ async function marcarOrigen(row: Row, resp: RndcRespuesta): Promise<void> {
       "UPDATE manifiesto SET estado_rndc = 'anulado', anulacion_rndc_id = ?, anulado_at = NOW() WHERE id = ?",
       [resp.ingresoId, Number(row.referencia_id)],
     );
+    // Libera el cupo de vehículo que este despacho consumió en confirmarDespacho()
+    // (que resta 1 de cantidad_vehiculos y marca 'procesada'/'despachada'). Aquí se
+    // hace el inverso exacto — tope en cantidad_vehiculos_original, y solo con los
+    // valores que el ENUM solicitud_servicio.estado realmente admite
+    // ('borrador'|'procesada'|'despachada'|'anulada'; nunca otro).
+    const solicitudId = Number(row.solicitud_id);
+    const sol = await fila(
+      db(),
+      'SELECT cantidad_vehiculos, cantidad_vehiculos_original FROM solicitud_servicio WHERE id = ?',
+      [solicitudId],
+    );
+    if (sol !== null) {
+      const original = Number(sol.cantidad_vehiculos_original ?? 1) || 1;
+      const nuevaCantidad = Math.min(Number(sol.cantidad_vehiculos ?? 0) + 1, original);
+      const nuevoEstado = nuevaCantidad >= original ? 'borrador' : 'procesada';
+      await db().query('UPDATE solicitud_servicio SET cantidad_vehiculos = ?, estado = ? WHERE id = ?', [
+        nuevaCantidad,
+        nuevoEstado,
+        solicitudId,
+      ]);
+    }
   }
   if (tipo === 'anular_remesa') {
     await db().query(
@@ -942,6 +963,68 @@ export interface ItemResult {
 }
 
 /** Processes a single queue item by id. Port of procesarItem(). */
+/** tipo_documento que forman el "lote de despacho": se crean y cancelan juntos. */
+const LOTE_DESPACHO = ['tercero', 'vehiculo', 'remesa', 'manifiesto'];
+
+/**
+ * Cancela un envío que TODAVÍA NO se mandó al RNDC (estado 'pendiente' o
+ * 'error') — a diferencia de anular, que revierte algo que el RNDC ya aceptó,
+ * cancelar solo limpia la cola local: nada salió nunca, así que no hay nada
+ * que reportarle al Ministerio.
+ *
+ * - tercero/vehiculo/remesa/manifiesto: son un lote atómico (dependenciaPendiente
+ *   exige que los de orden menor ya estén 'enviado' antes de mandar los de
+ *   orden mayor). Cancelar solo uno rompería esa cadena — p.ej. borrar la fila
+ *   de remesa pero dejar la de manifiesto pendiente le permitiría "saltarse" la
+ *   dependencia y mandar el manifiesto sin su remesa. Por eso cancelar
+ *   cualquiera de estos cuatro cancela TODO el lote pendiente/error de ese
+ *   manifiesto, y deja remesa/manifiesto en 'pendiente' — editable y
+ *   reenviable de nuevo (no hay ningún radicado del RNDC que proteger).
+ * - cumplido_remesa/cumplido_manifiesto: se cancela solo esa fila; su
+ *   cumplido_estado_rndc ya está en 'pendiente' (nunca llegó a 'aceptado'
+ *   mientras la fila siga sin enviar), no hay nada más que revertir.
+ * - anular_*: NO se puede cancelar. Cancelar un paso de una anulación a medio
+ *   camino podría dejarla en un estado imposible de reconciliar (p.ej. el
+ *   cumplido ya anulado en el RNDC pero el manifiesto nunca llegó a anularse
+ *   localmente) — hay que dejar que termine o reintentarla, nunca borrarla.
+ */
+export async function cancelarItem(colaId: number): Promise<ItemResult> {
+  const row = await fila(db(), 'SELECT * FROM cola_envios WHERE id = ?', [colaId]);
+  if (!row) return { ok: false, mensaje: `Item #${colaId} no encontrado.` };
+  if (!['pendiente', 'error'].includes(row.estado)) {
+    return { ok: false, mensaje: `No se puede cancelar: ya está en estado "${row.estado}".` };
+  }
+  if (String(row.tipo_documento).startsWith('anular_')) {
+    return {
+      ok: false,
+      mensaje: 'Los pasos de una anulación no se pueden cancelar — espera a que termine o reintenta el envío.',
+    };
+  }
+
+  return withTransaction(async (conn) => {
+    if (LOTE_DESPACHO.includes(row.tipo_documento)) {
+      const manifiestoId = Number(row.manifiesto_id);
+      await conn.query(
+        `DELETE FROM cola_envios WHERE manifiesto_id = ? AND tipo_documento IN ('tercero','vehiculo','remesa','manifiesto')
+           AND estado IN ('pendiente','error')`,
+        [manifiestoId],
+      );
+      // Nunca llegaron a 'aceptado' (si no, esta fila ya estaría 'enviado'),
+      // así que vuelven a su valor por defecto — deja el despacho editable.
+      await conn.query(
+        `UPDATE remesa r JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
+         SET r.estado_rndc = 'pendiente' WHERE mr.manifiesto_id = ?`,
+        [manifiestoId],
+      );
+      await conn.query("UPDATE manifiesto SET estado_rndc = 'pendiente' WHERE id = ?", [manifiestoId]);
+      return { ok: true, mensaje: 'Despacho cancelado — puedes editarlo y volver a enviarlo.' };
+    }
+
+    await conn.query('DELETE FROM cola_envios WHERE id = ?', [colaId]);
+    return { ok: true, mensaje: 'Envío cancelado.' };
+  });
+}
+
 export async function procesarItem(colaId: number): Promise<ItemResult> {
   const habilitado = config().cola.envioHabilitado;
   const minutos = config().cola.minutosReintento;
@@ -972,6 +1055,13 @@ export async function procesarItem(colaId: number): Promise<ItemResult> {
 
 /** Processes the queue items of a single dispatch. Port of procesarDespacho(). */
 export async function procesarDespacho(manifiestoId: number): Promise<ItemResult> {
+  const manif = await fila(db(), 'SELECT estado_rndc FROM manifiesto WHERE id = ?', [manifiestoId]);
+  if (manif?.estado_rndc === 'anulacion_pendiente' || manif?.estado_rndc === 'anulado') {
+    // Progresar la anulación se hace desde Cola (por fila o "Procesar ahora"),
+    // no desde este botón de despacho — evita reenviar por la vía equivocada.
+    return { ok: false, mensaje: 'Este despacho está en proceso de anulación; procesa sus pasos desde Cola de envíos.' };
+  }
+
   const habilitado = config().cola.envioHabilitado;
   const minutos = config().cola.minutosReintento;
   const rndc = await RndcClient.desdeConfig();
@@ -1340,7 +1430,10 @@ export async function listarDespachosConPaginacion(
                 JOIN solicitud_servicio s ON s.id = r.solicitud_id
                 LEFT JOIN manifiesto_remesa mr ON mr.remesa_id = r.id
                 LEFT JOIN manifiesto m ON m.id = mr.manifiesto_id`;
-  let where = 'WHERE 1=1';
+  // Un manifiesto totalmente anulado desaparece de Despachos — ya no es un
+  // despacho activo; su remesa vuelve a estar disponible para uno nuevo
+  // (ver el ajuste de cantidad_vehiculos en marcarOrigen()).
+  let where = "WHERE (m.estado_rndc IS NULL OR m.estado_rndc <> 'anulado')";
   const params: unknown[] = [];
   if (q !== '') {
     where += ' AND (r.num_remesa LIKE ? OR m.num_manifiesto LIKE ?)';
@@ -1434,6 +1527,11 @@ export async function actualizarDespacho(manifiestoId: number, datos: Row): Prom
     if (manifiesto === null) return { ok: false, mensaje: 'Despacho no encontrado.' };
     if (manifiesto.estado_rndc === 'aceptado') {
       return { ok: false, mensaje: 'El manifiesto ya fue aceptado por el RNDC; no se puede editar.' };
+    }
+    if (manifiesto.estado_rndc === 'anulacion_pendiente' || manifiesto.estado_rndc === 'anulado') {
+      // El RNDC ya tiene (o está por confirmar) este consecutivo como anulado;
+      // reeditarlo y reenviarlo reutilizaría ese mismo número — evitarlo por completo.
+      return { ok: false, mensaje: 'Este despacho está en proceso de anulación; no se puede editar ni reenviar.' };
     }
 
     const remesasBody: Row[] = Array.isArray(datos.remesas) ? datos.remesas : [];

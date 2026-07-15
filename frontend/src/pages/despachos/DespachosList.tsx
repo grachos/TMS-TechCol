@@ -218,25 +218,31 @@ export default function DespachosList() {
                           </button>
                         </>
                       )}
-                      {d.manifiesto_id && d.estado_manifiesto !== 'aceptado' && (
-                        <button
-                          className="btn-ghost px-2 py-1"
-                          title="Editar despacho"
-                          onClick={() => navigate(`/despachos/${d.manifiesto_id}/editar`)}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                      )}
-                      {isAdmin && d.manifiesto_id && (
-                        <button
-                          className="btn-ghost px-2 py-1"
-                          title="Procesar despacho"
-                          disabled={sending === d.manifiesto_id}
-                          onClick={() => procesar(d.manifiesto_id)}
-                        >
-                          {sending === d.manifiesto_id ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                        </button>
-                      )}
+                      {d.manifiesto_id &&
+                        d.estado_manifiesto !== 'aceptado' &&
+                        d.estado_manifiesto !== 'anulacion_pendiente' &&
+                        d.estado_manifiesto !== 'anulado' && (
+                          <button
+                            className="btn-ghost px-2 py-1"
+                            title="Editar despacho"
+                            onClick={() => navigate(`/despachos/${d.manifiesto_id}/editar`)}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        )}
+                      {isAdmin &&
+                        d.manifiesto_id &&
+                        d.estado_manifiesto !== 'anulacion_pendiente' &&
+                        d.estado_manifiesto !== 'anulado' && (
+                          <button
+                            className="btn-ghost px-2 py-1"
+                            title="Procesar despacho"
+                            disabled={sending === d.manifiesto_id}
+                            onClick={() => procesar(d.manifiesto_id)}
+                          >
+                            {sending === d.manifiesto_id ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                          </button>
+                        )}
                       {isAdmin && d.manifiesto_id && d.estado_manifiesto === 'aceptado' && (
                         <button
                           className={`btn-ghost px-2 py-1 ${d.seguridadqr_error ? 'text-amber-600' : d.seguridadqr ? 'text-emerald-600' : ''}`}

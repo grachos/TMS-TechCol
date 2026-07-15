@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Send, Loader2, FileCode, Play, X, Ban, TriangleAlert } from 'lucide-react';
+import { Send, Loader2, FileCode, Play, X, Ban, TriangleAlert, XCircle } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import { Alert } from '../../components/Alert';
@@ -123,6 +123,24 @@ export default function ColaMonitor() {
       await load();
     } catch (e) {
       setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo procesar el item.' });
+    }
+  }
+
+  async function cancelarItem(id: number, tipoDocumento: string) {
+    const esLote = ['tercero', 'vehiculo', 'remesa', 'manifiesto'].includes(tipoDocumento);
+    const confirmado = window.confirm(
+      esLote
+        ? 'Esto cancela TODO el despacho pendiente (remesa + manifiesto), no solo esta fila, y lo deja editable de nuevo. ¿Continuar?'
+        : '¿Cancelar este envío? No se le reporta nada al RNDC — nunca se envió.',
+    );
+    if (!confirmado) return;
+    setFlash(null);
+    try {
+      const r = await api<{ ok: boolean; mensaje: string }>(`/cola/${id}/cancelar`, { method: 'POST' });
+      setFlash({ kind: r.ok ? 'ok' : 'err', message: r.mensaje });
+      await load();
+    } catch (e) {
+      setFlash({ kind: 'err', message: e instanceof ApiError ? e.message : 'No se pudo cancelar el item.' });
     }
   }
 
@@ -265,6 +283,15 @@ export default function ColaMonitor() {
                         {isAdmin && ['pendiente', 'error'].includes(f.estado) && (
                           <button className="btn-ghost px-2 py-1" title="Procesar" onClick={() => procesarItem(f.id)}>
                             <Send size={15} />
+                          </button>
+                        )}
+                        {isAdmin && ['pendiente', 'error'].includes(f.estado) && !String(f.tipo_documento).startsWith('anular_') && (
+                          <button
+                            className="btn-ghost px-2 py-1 text-slate-500"
+                            title="Cancelar (todavía no se envió al RNDC)"
+                            onClick={() => cancelarItem(f.id, f.tipo_documento)}
+                          >
+                            <XCircle size={15} />
                           </button>
                         )}
                         {isAdmin && f.estado === 'enviado' && ANULABLES.has(f.tipo_documento) && f.estado_origen === 'aceptado' && (
