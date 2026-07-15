@@ -1158,6 +1158,11 @@ const LOTE_DESPACHO = ['tercero', 'vehiculo', 'remesa', 'manifiesto'];
  *   Además, si tras cancelar ya no queda NADA activo de la anulación (ver
  *   revertirAnulacionSiNoQuedaNadaActivo), el despacho vuelve a 'aceptado'
  *   -botón "Anular" disponible de nuevo- sin necesidad de cancelar todo el lote.
+ *   EXCEPCIÓN — punto sin retorno: si el MANIFIESTO ya fue anulado por el
+ *   RNDC (proc 32 'enviado'), el despacho ya desapareció de Despachos, así
+ *   que no se permite cancelar los pasos de anulación de sus remesas
+ *   (9/28/54) — quedarían colgadas sin una forma clara de retomar el trámite.
+ *   En ese caso hay que dejar que terminen o reintentarlos desde Cola.
  */
 
 const TIPOS_ANULACION_MANIFIESTO = ['anular_cumplido_manifiesto', 'anular_manifiesto'];
@@ -1207,6 +1212,9 @@ async function revertirAnulacionSiNoQuedaNadaActivo(conn: Queryable, manifiestoI
   }
 }
 
+/** Pasos de anulación que son "de la remesa", no del manifiesto en sí. */
+const TIPOS_ANULACION_DE_REMESA = ['anular_remesa', 'anular_cumplido_remesa', 'anular_cumplido_inicial_remesa'];
+
 export async function cancelarItem(colaId: number): Promise<ItemResult> {
   const row = await fila(db(), 'SELECT * FROM cola_envios WHERE id = ?', [colaId]);
   if (!row) return { ok: false, mensaje: `Item #${colaId} no encontrado.` };
@@ -1215,6 +1223,27 @@ export async function cancelarItem(colaId: number): Promise<ItemResult> {
   }
 
   return withTransaction(async (conn) => {
+    // Si el MANIFIESTO de este despacho ya fue anulado por el RNDC (proc 32
+    // 'enviado'), el despacho ya desapareció de Despachos — es un punto sin
+    // retorno. Cancelar un paso de anulación de sus remesas (9/28/54) las
+    // dejaría "colgadas": ni anuladas ni con una forma clara de retomar el
+    // trámite desde la pantalla de Despachos (el registro ya no existe ahí).
+    // En ese caso no se permite cancelar: hay que dejar que termine o
+    // reintentarlo desde Cola.
+    if (TIPOS_ANULACION_DE_REMESA.includes(row.tipo_documento)) {
+      const manifiestoAnulado = await fila(
+        conn,
+        `SELECT id FROM cola_envios WHERE manifiesto_id = ? AND referencia_id = ? AND tipo_documento = 'anular_manifiesto' AND estado = 'enviado' LIMIT 1`,
+        [row.manifiesto_id, row.manifiesto_id],
+      );
+      if (manifiestoAnulado !== null) {
+        return {
+          ok: false,
+          mensaje: 'El manifiesto de este despacho ya fue anulado por el RNDC. Sus remesas deben terminar de anularse también — reintenta el envío en vez de cancelarlo.',
+        };
+      }
+    }
+
     if (LOTE_DESPACHO.includes(row.tipo_documento)) {
       const manifiestoId = Number(row.manifiesto_id);
       await conn.query(
