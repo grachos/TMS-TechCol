@@ -16,7 +16,7 @@ export interface InformeFiltros {
   q?: string;
   numRemesa?: string;
   numManifiesto?: string;
-  estado?: string; // '' | 'pendiente' | 'despachado' | 'cumplido' | 'anulacion_pendiente' | 'anulado'
+  estado?: string; // '' | 'despachado' | 'cumplido' | 'anulado'
   cliente?: string;
   desde?: string;
   hasta?: string;
@@ -39,29 +39,27 @@ const NATURALEZAS: Record<string, string> = {
 
 const fullName = (a: string) => `TRIM(CONCAT_WS(' ', ${a}.nombre, NULLIF(${a}.primer_apellido,''), NULLIF(${a}.segundo_apellido,'')))`;
 
-// 'anulado'/'anulacion_pendiente' se revisan primero: son la verdad final del
-// manifiesto sin importar qué tan lejos había llegado su cumplido antes.
+// Solo 3 estados de negocio para el informe (despachado/cumplido/anulado) —
+// si además está o no radicado en el RNDC ya lo dicen las columnas "RNDC
+// Manifiesto"/"RNDC Remesa" (su ingresoid), no hace falta un 4to/5to estado
+// para eso. 'anulacion_pendiente' se reporta ya como 'anulado' (es la
+// intención confirmada del usuario, aunque el RNDC todavía no la aceptó).
+const ANULADO_SQL = "m.estado_rndc IN ('anulado','anulacion_pendiente')";
 const ESTADO_PROCESO_SQL = `CASE
-    WHEN m.estado_rndc = 'anulado' THEN 'anulado'
-    WHEN m.estado_rndc = 'anulacion_pendiente' THEN 'anulacion_pendiente'
+    WHEN ${ANULADO_SQL} THEN 'anulado'
     WHEN m.cumplido_estado_rndc = 'aceptado' THEN 'cumplido'
-    WHEN m.estado_rndc = 'aceptado' OR s.estado = 'despachada' THEN 'despachado'
-    ELSE 'pendiente'
+    ELSE 'despachado'
   END`;
 
-/** WHERE fragment for the derived process status (references m + s). */
+/** WHERE fragment for the derived process status (references m). */
 function estadoWhere(estado?: string): string | null {
   switch (estado) {
     case 'anulado':
-      return "m.estado_rndc = 'anulado'";
-    case 'anulacion_pendiente':
-      return "m.estado_rndc = 'anulacion_pendiente'";
+      return ANULADO_SQL;
     case 'cumplido':
-      return "(m.estado_rndc IS NULL OR m.estado_rndc NOT IN ('anulado','anulacion_pendiente')) AND m.cumplido_estado_rndc = 'aceptado'";
+      return `(m.estado_rndc IS NULL OR NOT (${ANULADO_SQL})) AND m.cumplido_estado_rndc = 'aceptado'`;
     case 'despachado':
-      return "(m.estado_rndc IS NULL OR m.estado_rndc NOT IN ('anulado','anulacion_pendiente')) AND (m.estado_rndc = 'aceptado' OR s.estado = 'despachada') AND (m.cumplido_estado_rndc IS NULL OR m.cumplido_estado_rndc <> 'aceptado')";
-    case 'pendiente':
-      return "(m.estado_rndc IS NULL OR m.estado_rndc NOT IN ('aceptado','anulado','anulacion_pendiente')) AND s.estado <> 'despachada' AND (m.cumplido_estado_rndc IS NULL OR m.cumplido_estado_rndc <> 'aceptado')";
+      return `(m.estado_rndc IS NULL OR NOT (${ANULADO_SQL})) AND (m.cumplido_estado_rndc IS NULL OR m.cumplido_estado_rndc <> 'aceptado')`;
     default:
       return null;
   }
@@ -114,7 +112,9 @@ const SELECT_REMESA = `
   m.retencion_ica,
   m.fopat,
   r.rndc_ingreso_id AS rndc_remesa,
-  m.rndc_ingreso_id AS rndc_manifiesto`;
+  -- El ingresoid deja de ser relevante una vez anulado: se oculta para no dar
+  -- a entender que el manifiesto sigue vigente en el RNDC con ese radicado.
+  CASE WHEN ${ANULADO_SQL} THEN NULL ELSE m.rndc_ingreso_id END AS rndc_manifiesto`;
 
 // ---------- Manifiesto level (summary) ----------
 
@@ -160,7 +160,7 @@ const SELECT_MANIF = `
   m.retencion_fuente,
   m.retencion_ica,
   m.fopat,
-  m.rndc_ingreso_id AS rndc_manifiesto`;
+  CASE WHEN ${ANULADO_SQL} THEN NULL ELSE m.rndc_ingreso_id END AS rndc_manifiesto`;
 
 /** WHERE + params for the remesa level. */
 function whereRemesa(f: InformeFiltros): { where: string; params: Record<string, string> } {

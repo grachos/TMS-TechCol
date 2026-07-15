@@ -66,6 +66,7 @@ manifiestos, RNDC…) se preservan. Si es una instalación nueva:
    migracion_v42_anulacion.sql   ← NUEVO (columnas de anulación en manifiesto/remesa)
    migracion_v43_cola_tipo_documento_anulacion.sql   ← NUEVO — CRÍTICA, correr cuanto antes
    migracion_v44_estado_rndc_anulacion.sql   ← NUEVO — CRÍTICA, correr cuanto antes
+   migracion_v45_reparar_anulacion_huerfana.sql   ← NUEVO — reparación puntual, idempotente
    ```
 
    > **v43 y v44 corrigen corrupción silenciosa de datos, no son solo ajustes
@@ -79,6 +80,14 @@ manifiestos, RNDC…) se preservan. Si es una instalación nueva:
    > auditoría (`anulacion_motivo`, `anulacion_rndc_id`) para inferir el
    > estado real. Ejecútalas en orden (v43 antes que v44) antes de seguir
    > anulando.
+   >
+   > **v45** repara un caso más puntual: si cancelaste un paso de anulación en
+   > Cola *antes* de que existiera `revertirAnulacionSiNoQuedaNadaActivo()`
+   > (commit `a022900`), ese manifiesto/remesa quedó atascado en
+   > `anulacion_pendiente` para siempre — sin ningún paso activo en `cola_envios`
+   > que lo explique, sin poder anularse ni cumplirse de nuevo. v45 es
+   > idempotente (se puede correr las veces que haga falta) y solo toca esos
+   > casos huérfanos.
 
    Todas las migraciones usan `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF
    NOT EXISTS` / `ADD INDEX IF NOT EXISTS`, así que son **idempotentes**: si tu

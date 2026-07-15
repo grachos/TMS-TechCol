@@ -35,17 +35,12 @@ interface Filtros {
 
 const EMPTY: Filtros = { q: '', num_remesa: '', num_manifiesto: '', estado: '', cliente: '', desde: '', hasta: '' };
 
+// Solo 3 estados de negocio: si está o no radicado en el RNDC ya lo dice la
+// columna "RNDC Manifiesto"/"RNDC Remesa" (su ingresoid).
 const ESTADO_STYLE: Record<string, string> = {
-  cumplido: 'bg-emerald-100 text-emerald-700',
   despachado: 'bg-blue-100 text-blue-700',
-  pendiente: 'bg-amber-100 text-amber-700',
-  anulacion_pendiente: 'bg-orange-100 text-orange-700',
+  cumplido: 'bg-emerald-100 text-emerald-700',
   anulado: 'bg-slate-200 text-slate-700',
-};
-
-const ESTADO_LABEL: Record<string, string> = {
-  anulacion_pendiente: 'Anulación en curso',
-  anulado: 'Anulado',
 };
 
 export default function InformePage() {
@@ -162,10 +157,8 @@ export default function InformePage() {
             <label className="field-label">Estado</label>
             <select className="field-input" value={filtros.estado} onChange={(e) => set('estado', e.target.value)}>
               <option value="">Todos</option>
-              <option value="pendiente">Pendiente</option>
               <option value="despachado">Despachado</option>
               <option value="cumplido">Cumplido</option>
-              <option value="anulacion_pendiente">Anulación en curso</option>
               <option value="anulado">Anulado</option>
             </select>
           </div>
@@ -225,7 +218,7 @@ export default function InformePage() {
                     <td key={c.key} className="px-3 py-2 text-slate-700">
                       {c.key === 'estado_proceso' ? (
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_STYLE[String(row[c.key])] ?? 'bg-slate-100 text-slate-600'}`}>
-                          {ESTADO_LABEL[String(row[c.key])] ?? String(row[c.key] ?? '')}
+                          {String(row[c.key] ?? '')}
                         </span>
                       ) : (
                         (row[c.key] ?? '') as React.ReactNode
